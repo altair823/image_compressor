@@ -1,0 +1,6 @@
+/target/
+/original_images/
+Cargo.lock
+/doc/
+.DS_Store
+/build/
