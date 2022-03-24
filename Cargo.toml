@@ -5,8 +5,7 @@ description = "A image compressing module using mozjpeg, and image crates."
 version = "1.0.0"
 edition = "2021"
 license = "MIT"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/altair823/image_compressor"
 
 [dependencies]
 image = "0.24.1"
