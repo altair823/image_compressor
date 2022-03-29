@@ -92,6 +92,7 @@ use crossbeam_queue::SegQueue;
 
 pub mod crawler;
 pub mod compressor;
+pub mod dir;
 
 pub use compressor::Factor;
 
@@ -158,6 +159,11 @@ impl FolderCompressor {
     /// ```
     pub fn set_cal_func(&mut self, cal_func: fn(u32, u32, u64) -> Factor){
         self.calculate_quality_and_size = Arc::new(cal_func);
+    }
+
+    /// Set whether to delete original files. 
+    pub fn set_delelte_origin(&mut self, to_delete: bool){
+        self.delete_original = to_delete;
     }
 
     /// Setter for the number of threads used to compress images. 
@@ -227,7 +233,7 @@ impl FolderCompressor {
             let arc_queue = Arc::clone(&queue);
             let arc_cal_func = Arc::clone(&self.calculate_quality_and_size);
             let handle = thread::spawn(move || {
-                process_with_sender(arc_queue, &arc_root, &arc_dest, *arc_cal_func, new_sender);
+                process_with_sender(arc_queue, &arc_root, &arc_dest, self.delete_original, *arc_cal_func, new_sender);
             });
             handles.push(handle);
         }
@@ -235,6 +241,7 @@ impl FolderCompressor {
         for h in handles{
             h.join().unwrap();
         }
+
         match sender.send(String::from("Compress complete!")){
             Ok(_) => {},
             Err(e) => {
@@ -285,7 +292,7 @@ impl FolderCompressor {
             let arc_queue = Arc::clone(&queue);
             let arc_cal_func = Arc::clone(&self.calculate_quality_and_size);
             let handle = thread::spawn(move || {
-                process(arc_queue, &arc_root, &arc_dest, *arc_cal_func);
+                process(arc_queue, &arc_root, &arc_dest, self.delete_original, *arc_cal_func);
             });
             handles.push(handle);
         }
@@ -301,6 +308,7 @@ fn process(
     queue: Arc<SegQueue<PathBuf>>, 
     root: &PathBuf,
     dest: &PathBuf,
+    to_delete_original: bool,
     cal_func: fn(u32, u32, u64) -> Factor){
     while !queue.is_empty() {
         match queue.pop() {
@@ -336,7 +344,8 @@ fn process(
                         }
                     };
                 }
-                let compressor = Compressor::new(&file, new_dest_dir, cal_func);
+                let mut compressor = Compressor::new(&file, new_dest_dir, cal_func);
+                compressor.set_delete_origin(to_delete_original);
                 match compressor.compress_to_jpg(){
                     Ok(_) => {
                         println!("Compress complete! File: {}", file_name);
@@ -354,6 +363,7 @@ fn process_with_sender(
     queue: Arc<SegQueue<PathBuf>>,
     root: &PathBuf,
     dest: &PathBuf,
+    to_delete_original: bool,
     cal_func: fn(u32, u32, u64) -> Factor,
     sender: mpsc::Sender<String>){
     while !queue.is_empty() {
@@ -390,7 +400,8 @@ fn process_with_sender(
                         }
                     };
                 }
-                let compressor = Compressor::new(&file, new_dest_dir, cal_func);
+                let mut compressor = Compressor::new(&file, new_dest_dir, cal_func);
+                compressor.set_delete_origin(to_delete_original);
                 match compressor.compress_to_jpg(){
                     Ok(p) => {
                         match sender.send(format!("Compress complete! File: {}", p.file_name().unwrap().to_str().unwrap())){

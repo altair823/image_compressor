@@ -314,7 +314,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 #[cfg(test)]
 mod tests{
     use std::fs;
-    use mozjpeg::CompInfoExt;
 
     use super::*;
 
