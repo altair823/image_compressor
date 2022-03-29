@@ -28,7 +28,7 @@ use image::imageops::FilterType;
 use crate::get_file_list;
 
 
-fn delete_converted_file<O: AsRef<Path>>(file_path: O) -> Result<O, Box<dyn Error>>
+fn delete_duplicate_file<O: AsRef<Path>>(file_path: O) -> Result<O, Box<dyn Error>>
         where std::path::PathBuf: PartialEq<O>{
         let current_dir_file_list = match get_file_list(file_path.as_ref().parent().unwrap()){
             Ok(mut v) => {
@@ -118,6 +118,7 @@ pub struct Compressor<O: AsRef<Path>, D: AsRef<Path>>{
     calculate_quality_and_size: fn(u32, u32, u64) -> Factor,
     original_path: O,
     destination_path: D,
+    delete_orininal: bool,
 }
 
 impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
@@ -139,7 +140,12 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
     /// let compressor = Compressor::new(origin_dir, dest_dir, |width, height, file_size| {return Factor::new(75., 0.7)});
     /// ```
     pub fn new(origin_dir: O, dest_dir: D, cal_factor_func: fn(u32, u32, u64)->Factor) -> Self{
-        Compressor { calculate_quality_and_size: cal_factor_func, original_path: origin_dir, destination_path: dest_dir }
+        Compressor { calculate_quality_and_size: cal_factor_func, original_path: origin_dir, destination_path: dest_dir, delete_orininal: false }
+    }
+
+    /// Sets whether the program deletes the original file.
+    pub fn set_delete_origin(&mut self, to_delete: bool) {
+        self.delete_orininal = to_delete;
     }
 
     fn convert_to_jpg(&self) -> Result<PathBuf, Box<dyn Error>>{
@@ -205,6 +211,8 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
     /// Compress quality and resize ratio calculate based on file size of the image.
     /// For a continuous multithreading process, every single error doesn't occur panic or exception and just print error message with return Ok.
     ///
+    /// If the flag to delete the original is true, the function delete the original file. 
+    /// 
     /// # Examples
     /// ```
     /// use std::path::PathBuf;
@@ -275,6 +283,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             Err(_) => 0,
         };
 
+        // Calculate factor. 
         let factor = (self.calculate_quality_and_size)(width, height, file_size);
 
         let (resized_img_data, target_width, target_height) = self.resize(origin_file_path, factor.size_ratio())?;
@@ -284,13 +293,19 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let mut file = BufWriter::new(File::create(&target_file)?);
         file.write_all(&compressed_img_data)?;
 
+        // Delete duplicate file which is converted from original one. 
         match converted_file {
             Some(p) => {
-                delete_converted_file(p)?;
+                delete_duplicate_file(p)?;
             }
             None => {},
         }
 
+        // Delete the original file when the flag is true. 
+        match self.delete_orininal{
+            true => fs::remove_file(&self.original_path)?,
+            false => (),
+        }
 
         Ok(target_file)
     }
@@ -299,6 +314,8 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 #[cfg(test)]
 mod tests{
     use std::fs;
+    use mozjpeg::CompInfoExt;
+
     use super::*;
 
     fn setup(test_num: i32) -> (i32, PathBuf, PathBuf){
@@ -306,14 +323,14 @@ mod tests{
         if test_origin_dir.is_dir(){
             fs::remove_dir_all(&test_origin_dir).unwrap();
         }
-        fs::create_dir(&test_origin_dir.as_path()).unwrap();
+        fs::create_dir_all(&test_origin_dir.as_path()).unwrap();
 
 
         let test_dest_dir = PathBuf::from(&format!("{}{}", "test_dest", test_num));
         if test_dest_dir.is_dir(){
             fs::remove_dir_all(&test_dest_dir).unwrap();
         }
-        fs::create_dir(&test_dest_dir.as_path()).unwrap();
+        fs::create_dir_all(&test_dest_dir.as_path()).unwrap();
 
         (test_num, test_origin_dir, test_dest_dir)
     }
@@ -334,12 +351,14 @@ mod tests{
         let (_, test_origin_dir, test_dest_dir) = setup(1);
 
         fs::copy("original_images/file1.png", test_origin_dir.join("file1.png")).unwrap();
-        assert_eq!(convert_to_jpg(&test_origin_dir.join("file1.png"), &test_dest_dir).unwrap(),
-                   test_dest_dir.join("file1.jpg"));
+        let compressor = Compressor::new(test_origin_dir.join("file1.png"), &test_dest_dir, |_, _, _|{return Factor::new(70., 0.7)});
+        assert_eq!(compressor.convert_to_jpg().unwrap(),
+                   test_origin_dir.join("file1.jpg"));
 
         fs::copy("original_images/dir1/file5.webp", test_origin_dir.join("file5.webp")).unwrap();
-        assert_eq!(convert_to_jpg(&test_origin_dir.join("file5.webp"), &test_dest_dir).unwrap(),
-                    test_dest_dir.join("file5.jpg"));
+        let compressor = Compressor::new(test_origin_dir.join("file5.webp"), &test_dest_dir, |_, _, _|{return Factor::new(70., 0.7)});
+        assert_eq!(compressor.convert_to_jpg().unwrap(),
+                    test_origin_dir.join("file5.jpg"));
         cleanup(1);
     }
 
@@ -351,7 +370,9 @@ mod tests{
 
         fs::copy(Path::new("original_images/file4.jpg"), &test_origin_path).unwrap();
 
-        compress_to_jpg(test_origin_dir.join("file4.jpg"), test_dest_dir, |i| -> (f32, f32) { return (75., 0.7);}).unwrap();
+        let compressor = Compressor::new(test_origin_dir.join("file4.jpg"), test_dest_dir, |_, _, _|{ return Factor::new(75., 0.7);});
+
+        compressor.compress_to_jpg().unwrap();
 
         assert!(test_dest_path.is_file());
         println!("Original file size: {}, Compressed file size: {}",
@@ -364,21 +385,34 @@ mod tests{
         let (_, test_origin_dir, test_dest_dir) = setup(3);
         fs::copy("original_images/file7.txt", test_origin_dir.join("file7.txt")).unwrap();
 
-        assert!(compress_to_jpg(test_origin_dir.join("file7.txt"), &test_dest_dir, |i| -> (f32, f32) { return (75., 0.7);}).is_err());
+        let compressor = Compressor::new((&test_origin_dir).join("file7.txt"), &test_dest_dir, |_, _, _|{ return Factor::new(75., 0.7);});
+        assert!(compressor.compress_to_jpg().is_err());
         assert!(test_dest_dir.join("file7.txt").is_file());
         cleanup(3);
     }
 
     #[test]
-    fn delete_converted_file_test(){
+    fn delete_duplicate_file_test(){
         let (_, test_origin_dir, _) = setup(7);
-        //fs::copy("original_images/file1.png", test_origin_dir.join("file1.png")).unwrap();
+        fs::copy("original_images/file1.png", test_origin_dir.join("file1.png")).unwrap();
         fs::copy("original_images/file2.jpg", test_origin_dir.join("file2.jpg")).unwrap();
 
-        match delete_converted_file(test_origin_dir.join("file2.jpg")){
+        match delete_duplicate_file(test_origin_dir.join("file2.jpg")){
             Ok(o) => println!("{}", o.to_str().unwrap()),
             Err(e) => println!("{}", e),
         }
         cleanup(7);
     }
+
+    #[test]
+    fn delete_original_test(){
+        let (_, test_origin_dir, test_dest_dir) = setup(9);
+        fs::copy("original_images/file2.jpg", test_origin_dir.join("file2.jpg")).unwrap();
+
+        let mut compressor = Compressor::new(test_origin_dir.join("file2.jpg"), test_dest_dir, |width, height, file_size| {return Factor::new(75., 0.7)});
+        compressor.set_delete_origin(true);
+        compressor.compress_to_jpg();
+        cleanup(9);
+    }
 }
+

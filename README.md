@@ -34,7 +34,7 @@ let thread_count = 4;                       // number of threads
 
 let mut comp = FolderCompressor::new(origin, dest);
 comp.set_cal_func(|width, height, file_size| {return Factor::new(75., 0.7)}); //example closure
-comp.set_thread_count(4);
+comp.set_thread_count(thread_count);
 match comp.compress(){
     Ok(_) => {},
     Err(e) => println!("Cannot compress the folder!: {}", e),
@@ -59,7 +59,7 @@ let (tx, tr) = mpsc::channel();                 // Sender and Receiver. for more
 
 let mut comp = FolderCompressor::new(origin, dest);
 comp.set_cal_func(|width, height, file_size| {return Factor::new(75., 0.7)}); //example closure
-comp.set_thread_count(4);
+comp.set_thread_count(thread_count);
 match comp.compress_with_sender(tx.clone()) {
     Ok(_) => {},
     Err(e) => println!("Cannot compress the folder!: {}", e),

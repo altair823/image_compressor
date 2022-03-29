@@ -97,12 +97,12 @@ pub use compressor::Factor;
 
 fn default_cal_func(_width: u32, _height: u32, file_size: u64) -> Factor {
     return match file_size{
-        file_size if file_size > 5000000 => Factor::new(60., 0.5),
-        file_size if file_size > 1000000 => Factor::new(65., 0.6),
-        file_size if file_size > 500000 => Factor::new(70., 0.6),
-        file_size if file_size > 300000 => Factor::new(75., 0.7),
-        file_size if file_size > 100000 => Factor::new(80., 0.7),
-        _ => Factor::new(85., 0.8),
+        file_size if file_size > 5000000 => Factor::new(60., 0.7),
+        file_size if file_size > 1000000 => Factor::new(65., 0.75),
+        file_size if file_size > 500000 => Factor::new(70., 0.8),
+        file_size if file_size > 300000 => Factor::new(75., 0.85),
+        file_size if file_size > 100000 => Factor::new(80., 0.9),
+        _ => Factor::new(85., 1.0),
     }
 }
 
@@ -112,6 +112,7 @@ pub struct FolderCompressor{
     original_path: PathBuf,
     destination_path: PathBuf,
     thread_count: u32,
+    delete_original: bool,
 }
 
 impl FolderCompressor {
@@ -136,7 +137,9 @@ impl FolderCompressor {
             calculate_quality_and_size: Arc::new(default_cal_func), 
             original_path: origin_path.as_ref().to_path_buf(), 
             destination_path: dest_path.as_ref().to_path_buf(), 
-            thread_count: 1 }
+            thread_count: 1,
+            delete_original: false
+        }
     }
 
     /// Setter for calculation function that return a Factor using to compress images. 
@@ -415,6 +418,8 @@ fn process_with_sender(
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use fs_extra::dir;
+    use fs_extra::dir::CopyOptions;
     use super::*;
 
     fn setup(test_num: i32) -> (i32, PathBuf, PathBuf){
@@ -451,7 +456,14 @@ mod tests {
     #[test]
     fn folder_compress_test() {
         let (_, test_origin_dir, test_dest_dir) = setup(4);
-        folder_compress(test_origin_dir, test_dest_dir, 4).unwrap();
+        let mut folder_compressor = FolderCompressor::new(&test_origin_dir, &test_dest_dir);
+        folder_compressor.set_thread_count(4);
+        folder_compressor.compress().unwrap();
+        let a = get_file_list(test_origin_dir).unwrap();
+        let b = get_file_list(test_dest_dir).unwrap(); 
+        let origin_file_list = a.iter().map(|i| i.file_stem().unwrap()).collect::<Vec<_>>();
+        let dest_file_list =b.iter().map(|i| i.file_stem().unwrap()).collect::<Vec<_>>();
+        assert_eq!(origin_file_list, dest_file_list);
         cleanup(4);
     }
 }
