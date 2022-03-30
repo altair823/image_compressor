@@ -56,7 +56,6 @@ pub fn get_dir_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
 mod tests {
 
     use super::*;
-    use std::ffi::OsStr;
     use std::{io, fs};
     use std::path::{Path, PathBuf};
 
