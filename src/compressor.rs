@@ -1,4 +1,4 @@
-//! Containing functions that compress a image. 
+//! Module that contains things related with compressing a image. 
 //! 
 //! # Compressor
 //! 
@@ -408,9 +408,9 @@ mod tests{
         let (_, test_origin_dir, test_dest_dir) = setup(9);
         fs::copy("original_images/file2.jpg", test_origin_dir.join("file2.jpg")).unwrap();
 
-        let mut compressor = Compressor::new(test_origin_dir.join("file2.jpg"), test_dest_dir, |width, height, file_size| {return Factor::new(75., 0.7)});
+        let mut compressor = Compressor::new(test_origin_dir.join("file2.jpg"), test_dest_dir, |_, _, _| {return Factor::new(75., 0.7)});
         compressor.set_delete_origin(true);
-        compressor.compress_to_jpg();
+        compressor.compress_to_jpg().unwrap();
         cleanup(9);
     }
 }
