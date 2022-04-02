@@ -2,7 +2,7 @@
 name = "image_compressor"
 author = ["Kim tae hyeon <kimth0734@gmail.com>"]
 description = "A image compressing module using mozjpeg, and image crates."
-version = "1.1.0"
+version = "1.1.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/altair823/image_compressor"
