@@ -205,11 +205,10 @@ impl FolderCompressor {
         self.thread_count = thread_count;
     }
 
-    /// Folder compress function with mpsc::Sender.
+    /// Folder compress function.
     ///
-    /// The function compress all images in given origin folder with multithread at the same time,
-    /// and wait until everything is done. With `mpsc::Sender` (argument `tx` in this example),
-    /// the process running in this function will dispatch a message indicating whether image compression is complete.
+    /// The function compress all images in given origin folder with multithreading, and wait until everything is done. 
+    /// If user set a [`Sender`] for [`FolderCompressor`] before, the method sends messages whether compressing is complete. 
     /// 
     /// # Warning
     /// Since this function comsume its `self`, the `FolderCompressor` instance (which is self) is no longer available after calling this function. 
@@ -223,14 +222,15 @@ impl FolderCompressor {
     /// let (tx, tr) = mpsc::channel();
     /// 
     /// let mut comp = FolderCompressor::new(origin, dest);
+    /// comp.set_sender(tx);
     /// comp.set_thread_count(4);
     /// 
-    /// match comp.compress_with_sender(tx.clone()) {
+    /// match comp.compress(){
     ///     Ok(_) => {},
     ///     Err(e) => println!("Cannot compress the folder!: {}", e),
     /// }
     /// ```
-    pub fn compress_with_sender(
+    pub fn compress(
         self) -> Result<(), Box<dyn Error>> {
         let to_comp_file_list = get_file_list(&self.original_path)?;
         try_send_message(&self.sender, format!("Total file count: {}", to_comp_file_list.len()));
@@ -281,10 +281,12 @@ impl FolderCompressor {
         return Ok(());
     }
 
-    /// Folder compress function.
+    
+    ///  Folder compress function with mpsc::Sender.
     ///
     /// The function compress all images in given origin folder with multithread at the same time,
-    /// and wait until everything is done. This function does not send any messages.
+    /// and wait until everything is done. With `mpsc::Sender` (argument `tx` in this example),
+    /// the process running in this function will dispatch a message indicating whether image compression is complete.
     /// 
     /// # Warning
     /// Since this function comsume its `self`, the `FolderCompressor` instance (which is self) is no longer available after calling this function. 
@@ -295,32 +297,38 @@ impl FolderCompressor {
     ///
     /// let origin = PathBuf::from("origin_dir");
     /// let dest = PathBuf::from("dest_dir");
+    /// let (tx, tr) = mpsc::channel();
     /// 
     /// let mut comp = FolderCompressor::new(origin, dest);
     /// comp.set_thread_count(4);
     /// 
-    /// match comp.compress(){
+    /// match comp.compress_with_sender(tx.clone()) {
     ///     Ok(_) => {},
     ///     Err(e) => println!("Cannot compress the folder!: {}", e),
     /// }
     /// ```
-    pub fn compress(self) -> Result<(), Box<dyn Error>>{
+    #[deprecated(since = "1.2.0", note = "Use just `compress` method instead this")]
+    pub fn compress_with_sender(
+        self,
+        sender: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
         let to_comp_file_list = get_file_list(&self.original_path)?;
+        send_message(&sender, format!("Total file count: {}", to_comp_file_list.len()));
+
         let queue = Arc::new(SegQueue::new());
         for i in to_comp_file_list{
             queue.push(i);
         }
-
         let mut handles = Vec::new();
-        let arc_root = Arc::new(self.original_path);
+        let arc_root = Arc::new(self.original_path.to_path_buf());
         let arc_dest = Arc::new(self.destination_path);
         for _ in 0..self.thread_count {
+            let new_sender = sender.clone();
             let arc_root = Arc::clone(&arc_root);
             let arc_dest = Arc::clone(&arc_dest);
             let arc_queue = Arc::clone(&queue);
             let arc_cal_func = Arc::clone(&self.calculate_quality_and_size);
             let handle = thread::spawn(move || {
-                process(arc_queue, &arc_root, &arc_dest, self.delete_original, *arc_cal_func);
+                process_with_sender(arc_queue, &arc_root, &arc_dest, self.delete_original, *arc_cal_func, new_sender);
             });
             handles.push(handle);
         }
@@ -328,6 +336,17 @@ impl FolderCompressor {
         for h in handles{
             h.join().unwrap();
         }
+
+        send_message(&sender, "Compress complete!".to_string());
+
+        if self.delete_original {
+            match delete_recursive(self.original_path){
+                Ok(_) => send_message(&sender, "Delete original directories complete!".to_string()),
+                Err(e) => send_message(&sender, format!("Cannot delete original directories! {}", e)),
+            };
+        }
+        // let new_sender = mpsc::Sender::clone(&sender);
+        // process_with_sender(&queue, &dest, &root, new_sender);
         return Ok(());
     }
 }
