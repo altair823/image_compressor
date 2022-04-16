@@ -109,8 +109,15 @@ fn default_cal_func(_width: u32, _height: u32, file_size: u64) -> Factor {
     }
 }
 
-fn send_message(sender: &Sender<String>, message: &str){
-    match sender.send(String::from(message)){
+fn try_send_message<T: ToString>(sender: &Option<Sender<T>>, message: T){
+    match sender{
+        Some(s) => send_message(s, message),
+        None => (),
+    }
+}
+
+fn send_message<T: ToString>(sender: &Sender<T>, message: T){
+    match sender.send(message){
         Ok(_) => (),
         Err(e) => println!("Message passing error!: {}", e),
     }
@@ -123,6 +130,7 @@ pub struct FolderCompressor{
     destination_path: PathBuf,
     thread_count: u32,
     delete_original: bool,
+    sender: Option<Sender<String>>,
 }
 
 impl FolderCompressor {
@@ -148,7 +156,8 @@ impl FolderCompressor {
             original_path: origin_path.as_ref().to_path_buf(), 
             destination_path: dest_path.as_ref().to_path_buf(), 
             thread_count: 1,
-            delete_original: false
+            delete_original: false,
+            sender: None,
         }
     }
 
@@ -173,6 +182,10 @@ impl FolderCompressor {
     /// Set whether to delete original files. 
     pub fn set_delelte_origin(&mut self, to_delete: bool){
         self.delete_original = to_delete;
+    }
+
+    pub fn set_sender(&mut self, sender: Sender<String>){
+        self.sender = Some(sender);
     }
 
     /// Setter for the number of threads used to compress images. 
@@ -218,10 +231,9 @@ impl FolderCompressor {
     /// }
     /// ```
     pub fn compress_with_sender(
-        self,
-        sender: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+        self) -> Result<(), Box<dyn Error>> {
         let to_comp_file_list = get_file_list(&self.original_path)?;
-        send_message(&sender, &format!("Total file count: {}", to_comp_file_list.len()));
+        try_send_message(&self.sender, format!("Total file count: {}", to_comp_file_list.len()));
 
         let queue = Arc::new(SegQueue::new());
         for i in to_comp_file_list{
@@ -231,14 +243,24 @@ impl FolderCompressor {
         let arc_root = Arc::new(self.original_path.to_path_buf());
         let arc_dest = Arc::new(self.destination_path);
         for _ in 0..self.thread_count {
-            let new_sender = sender.clone();
             let arc_root = Arc::clone(&arc_root);
             let arc_dest = Arc::clone(&arc_dest);
             let arc_queue = Arc::clone(&queue);
             let arc_cal_func = Arc::clone(&self.calculate_quality_and_size);
-            let handle = thread::spawn(move || {
-                process_with_sender(arc_queue, &arc_root, &arc_dest, self.delete_original, *arc_cal_func, new_sender);
-            });
+            let handle;
+            match self.sender{
+                Some(ref s) => {
+                    let new_s = s.clone();
+                    handle = thread::spawn(move || {
+                        process_with_sender(arc_queue, &arc_root, &arc_dest, self.delete_original, *arc_cal_func, new_s);
+                    })
+                }
+                None => {
+                    handle = thread::spawn(move || {
+                        process(arc_queue, &arc_root, &arc_dest, self.delete_original, *arc_cal_func);
+                    })
+                },
+            }
             handles.push(handle);
         }
 
@@ -246,12 +268,12 @@ impl FolderCompressor {
             h.join().unwrap();
         }
 
-        send_message(&sender, "Compress complete!");
+        try_send_message(&self.sender, "Compress complete!".to_string());
 
         if self.delete_original {
             match delete_recursive(self.original_path){
-                Ok(_) => send_message(&sender, "Delete original directories complete!"),
-                Err(e) => send_message(&sender, &format!("Cannot delete original directories! {}", e)),
+                Ok(_) => try_send_message(&self.sender, "Delete original directories complete!".to_string()),
+                Err(e) => try_send_message(&self.sender, format!("Cannot delete original directories! {}", e)),
             };
         }
         // let new_sender = mpsc::Sender::clone(&sender);
@@ -409,8 +431,8 @@ fn process_with_sender(
                 let mut compressor = Compressor::new(&file, new_dest_dir, cal_func);
                 compressor.set_delete_origin(to_delete_original);
                 match compressor.compress_to_jpg(){
-                    Ok(p) => send_message(&sender, &format!("Compress complete! File: {}", p.file_name().unwrap().to_str().unwrap())),
-                    Err(e) => send_message(&sender, &e.to_string()),
+                    Ok(p) => send_message(&sender, format!("Compress complete! File: {}", p.file_name().unwrap().to_str().unwrap())),
+                    Err(e) => send_message(&sender, e.to_string()),
                 };
             }
         }
