@@ -22,49 +22,31 @@ This crate uses image crate for opening image files.
 #### `FolderCompressor` and its `compress` function example.
 
 The function compress all images in given origin folder with multithread at the same time,
-and wait until everything is done. This function does not using any `mpsc::Sender`.
+and wait until everything is done. 
+If user set a `Sender` for `FolderCompressor`, the method sends messages whether compressing is complete. 
+
 ```rust
 use std::path::PathBuf;
 use std::sync::mpsc;
 use image_compressor::FolderCompressor;
 use image_compressor::Factor;
+
 let origin = PathBuf::from("origin_dir");   // original directory path
 let dest = PathBuf::from("dest_dir");       // destination directory path
 let thread_count = 4;                       // number of threads
+let (tx, tr) = mpsc::channel();             // Sender and Receiver. for more info, check mpsc and message passing. 
 
 let mut comp = FolderCompressor::new(origin, dest);
-comp.set_cal_func(|width, height, file_size| {return Factor::new(75., 0.7)}); //example closure
-comp.set_thread_count(thread_count);
+comp.set_cal_func(|width, height, file_size| {return Factor::new(75., 0.7)});
+comp.set_thread_count(4);
+comp.set_sender(tx);
+
 match comp.compress(){
     Ok(_) => {},
     Err(e) => println!("Cannot compress the folder!: {}", e),
 }
 ```
 
-#### `FolderCompressor` and its `compress_with_sender` example.
-The function compress all images in given origin folder with multithread at the same time,
-and wait until everything is done. 
-
-With `mpsc::Sender` (argument `tx` in this example),
-the process running in this function will dispatch a message indicating whether image compression is complete.
-```rust
-use std::path::PathBuf;
-use std::sync::mpsc;
-use image_compressor::FolderCompressor;
-use image_compressor::Factor;
-let origin = PathBuf::from("origin_dir");       // original directory path
-let dest = PathBuf::from("dest_dir");           // destination directory path
-let thread_count = 4;                           // number of threads
-let (tx, tr) = mpsc::channel();                 // Sender and Receiver. for more info, check mpsc and message passing. 
-
-let mut comp = FolderCompressor::new(origin, dest);
-comp.set_cal_func(|width, height, file_size| {return Factor::new(75., 0.7)}); //example closure
-comp.set_thread_count(thread_count);
-match comp.compress_with_sender(tx.clone()) {
-    Ok(_) => {},
-    Err(e) => println!("Cannot compress the folder!: {}", e),
-}
-```
 #### `Compressor` and `compress_to_jpg` example.
 
 Compressing just a one image. 
