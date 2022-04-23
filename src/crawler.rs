@@ -32,7 +32,7 @@ pub fn get_file_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
             for component in file_list[i].read_dir()? {
                 file_list.push(component.unwrap().path());
             }
-        } else if &file_list[i].file_name().unwrap().to_str().unwrap()[..1] != "." {
+        } else if file_list[i].file_name().unwrap().to_str().unwrap().chars().collect::<Vec<_>>()[0] != '.' {
             image_list.push(file_list[i].to_path_buf());
         }
         i += 1;
@@ -127,20 +127,20 @@ mod tests {
     #[test]
     fn get_image_list_test() {
         setup();
-        let test_vec = get_file_list(PathBuf::from("test_original_images").as_path())
-            .unwrap()
-            .sort();
-        let expect_vec = vec![
+        let mut test_vec = get_file_list(PathBuf::from("test_original_images").as_path())
+            .unwrap();
+        let mut expect_vec = vec![
             PathBuf::from("test_original_images/file2.jpg"),
             PathBuf::from("test_original_images/file1.png"),
             PathBuf::from("test_original_images/dir1/file3.png"),
             PathBuf::from("test_original_images/file4.jpg"),
             PathBuf::from("test_original_images/dir1/file5.webp"),
-            PathBuf::from("test_original_images/dir1/dir2/file7.webp"),
-            PathBuf::from("test_original_images/dir1/dir2/file6.jpg"),
-            PathBuf::from("test_original_images/file8.txt"),
-        ]
-        .sort();
+            PathBuf::from("test_original_images/dir1/dir2/file6.webp"),
+            PathBuf::from("test_original_images/file7.txt"),
+        ];
+
+        test_vec.sort();
+        expect_vec.sort();
         assert_eq!(test_vec, expect_vec);
         cleanup();
     }
