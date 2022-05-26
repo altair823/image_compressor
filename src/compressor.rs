@@ -224,10 +224,14 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let height = height as f32 * resize_ratio;
 
         let resized_img = img.resize(width as u32, height as u32, FilterType::Triangle);
+
+        let resized_width = resized_img.width() as usize;
+        let resized_height = resized_img.height() as usize;
+
         Ok((
-            resized_img.to_rgb8().to_vec(),
-            resized_img.width() as usize,
-            resized_img.height() as usize,
+            resized_img.into_rgb8().into_vec(),
+            resized_width,
+            resized_height,
         ))
     }
 
