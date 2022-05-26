@@ -59,7 +59,7 @@ pub fn get_dir_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
     let dir_list = cur_list
         .iter()
         .filter(|p| p.is_dir())
-        .map(|p| PathBuf::from(p.to_path_buf()))
+        .map(|p| p.to_path_buf())
         .collect::<Vec<_>>();
 
     Ok(dir_list)

@@ -42,12 +42,11 @@ where
         }
     };
 
-    let current_dir_file_list = current_dir_file_list
+    let mut current_dir_file_list = current_dir_file_list
         .iter()
-        .map(|p| p.file_stem().unwrap().to_str().unwrap())
-        .collect::<Vec<_>>();
+        .map(|p| p.file_stem().unwrap().to_str().unwrap());
     let t = file_path.as_ref().file_stem().unwrap().to_str().unwrap();
-    if !current_dir_file_list.contains(&t) {
+    if !current_dir_file_list.any(|x| x == t) {
         return Err(Box::new(io::Error::new(
             ErrorKind::NotFound,
             format!(
@@ -98,9 +97,9 @@ impl Factor {
     /// - If the size ratio value exceeds 1.
     pub fn new(quality: f32, size_ratio: f32) -> Self {
         if (quality > 0. && quality <= 100.) && (size_ratio > 0. && size_ratio <= 1.) {
-            Factor {
-                quality: quality,
-                size_ratio: size_ratio,
+            Self {
+                quality,
+                size_ratio,
             }
         } else {
             panic!("Wrong Factor argument!");
@@ -259,10 +258,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let target_dir = self.destination_path.as_ref();
 
         let file_name = match origin_file_path.file_name() {
-            Some(e) => match e.to_str() {
-                Some(s) => s,
-                None => "",
-            },
+            Some(e) => e.to_str().unwrap_or(""),
             None => "",
         };
 
