@@ -32,7 +32,15 @@ pub fn get_file_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
             for component in file_list[i].read_dir()? {
                 file_list.push(component.unwrap().path());
             }
-        } else if file_list[i].file_name().unwrap().to_str().unwrap().chars().collect::<Vec<_>>()[0] != '.' {
+        } else if file_list[i]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .chars()
+            .collect::<Vec<_>>()[0]
+            != '.'
+        {
             image_list.push(file_list[i].to_path_buf());
         }
         i += 1;
@@ -51,7 +59,7 @@ pub fn get_dir_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
     let dir_list = cur_list
         .iter()
         .filter(|p| p.is_dir())
-        .map(|p| PathBuf::from(p.to_path_buf()))
+        .map(|p| p.to_path_buf())
         .collect::<Vec<_>>();
 
     Ok(dir_list)
@@ -127,8 +135,7 @@ mod tests {
     #[test]
     fn get_image_list_test() {
         setup();
-        let mut test_vec = get_file_list(PathBuf::from("test_original_images").as_path())
-            .unwrap();
+        let mut test_vec = get_file_list(PathBuf::from("test_original_images").as_path()).unwrap();
         let mut expect_vec = vec![
             PathBuf::from("test_original_images/file2.jpg"),
             PathBuf::from("test_original_images/file1.png"),

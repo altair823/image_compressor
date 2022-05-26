@@ -76,14 +76,14 @@ pub mod dir;
 pub use compressor::Factor;
 
 fn default_cal_func(_width: u32, _height: u32, file_size: u64) -> Factor {
-    return match file_size {
+    match file_size {
         file_size if file_size > 5000000 => Factor::new(60., 0.7),
         file_size if file_size > 1000000 => Factor::new(65., 0.75),
         file_size if file_size > 500000 => Factor::new(70., 0.8),
         file_size if file_size > 300000 => Factor::new(75., 0.85),
         file_size if file_size > 100000 => Factor::new(80., 0.9),
         _ => Factor::new(85., 1.0),
-    };
+    }
 }
 
 fn try_send_message<T: ToString>(sender: &Option<Sender<T>>, message: T) {
@@ -218,18 +218,17 @@ impl FolderCompressor {
             queue.push(i);
         }
         let mut handles = Vec::new();
-        let arc_root = Arc::new(self.original_path.to_path_buf());
+        let arc_root = Arc::new(self.original_path);
         let arc_dest = Arc::new(self.destination_path);
         for _ in 0..self.thread_count {
             let arc_root = Arc::clone(&arc_root);
             let arc_dest = Arc::clone(&arc_dest);
             let arc_queue = Arc::clone(&queue);
             let arc_cal_func = Arc::clone(&self.calculate_quality_and_size);
-            let handle;
-            match self.sender {
+            let handle = match self.sender {
                 Some(ref s) => {
                     let new_s = s.clone();
-                    handle = thread::spawn(move || {
+                    thread::spawn(move || {
                         process_with_sender(
                             arc_queue,
                             &arc_root,
@@ -240,18 +239,16 @@ impl FolderCompressor {
                         );
                     })
                 }
-                None => {
-                    handle = thread::spawn(move || {
-                        process(
-                            arc_queue,
-                            &arc_root,
-                            &arc_dest,
-                            self.delete_original,
-                            *arc_cal_func,
-                        );
-                    })
-                }
-            }
+                None => thread::spawn(move || {
+                    process(
+                        arc_queue,
+                        &arc_root,
+                        &arc_dest,
+                        self.delete_original,
+                        *arc_cal_func,
+                    );
+                }),
+            };
             handles.push(handle);
         }
 
@@ -262,7 +259,7 @@ impl FolderCompressor {
         try_send_message(&self.sender, "Compress complete!".to_string());
 
         if self.delete_original {
-            match delete_recursive(self.original_path) {
+            match delete_recursive(&*arc_root) {
                 Ok(_) => try_send_message(
                     &self.sender,
                     "Delete original directories complete!".to_string(),
@@ -273,7 +270,7 @@ impl FolderCompressor {
                 ),
             };
         }
-        return Ok(());
+        Ok(())
     }
 
     #[deprecated(since = "1.2.0", note = "Use just `compress` method instead this")]
@@ -289,7 +286,7 @@ impl FolderCompressor {
             queue.push(i);
         }
         let mut handles = Vec::new();
-        let arc_root = Arc::new(self.original_path.to_path_buf());
+        let arc_root = Arc::new(self.original_path);
         let arc_dest = Arc::new(self.destination_path);
         for _ in 0..self.thread_count {
             let new_sender = sender.clone();
@@ -317,7 +314,7 @@ impl FolderCompressor {
         send_message(&sender, "Compress complete!".to_string());
 
         if self.delete_original {
-            match delete_recursive(self.original_path) {
+            match delete_recursive(&*arc_root) {
                 Ok(_) => send_message(&sender, "Delete original directories complete!".to_string()),
                 Err(e) => send_message(
                     &sender,
@@ -325,14 +322,14 @@ impl FolderCompressor {
                 ),
             };
         }
-        return Ok(());
+        Ok(())
     }
 }
 
 fn process(
     queue: Arc<SegQueue<PathBuf>>,
-    root: &PathBuf,
-    dest: &PathBuf,
+    root: &Path,
+    dest: &Path,
     to_delete_original: bool,
     cal_func: fn(u32, u32, u64) -> Factor,
 ) {
@@ -387,8 +384,8 @@ fn process(
 
 fn process_with_sender(
     queue: Arc<SegQueue<PathBuf>>,
-    root: &PathBuf,
-    dest: &PathBuf,
+    root: &Path,
+    dest: &Path,
     to_delete_original: bool,
     cal_func: fn(u32, u32, u64) -> Factor,
     sender: mpsc::Sender<String>,

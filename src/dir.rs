@@ -53,14 +53,14 @@ pub fn delete_recursive<O: AsRef<Path>>(dir: O) -> Result<(), Box<dyn Error>> {
                 is_file_exist = true;
             }
         }
-        if is_file_exist == false {
+        if !is_file_exist {
             remove_dir_all(dir).unwrap();
-            return Ok(());
+            Ok(())
         } else {
-            return Err(Box::new(io::Error::new(
+            Err(Box::new(io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 "Directory is not empty!",
-            )));
+            )))
         }
     } else {
         Err(Box::new(io::Error::new(

@@ -1,6 +1,6 @@
 [package]
 name = "image_compressor"
-author = ["Kim tae hyeon <kimth0734@gmail.com>"]
+authors = ["Kim tae hyeon <kimth0734@gmail.com>"]
 description = "A image compressing module using mozjpeg, and image crates."
 version = "1.2.1"
 edition = "2021"
