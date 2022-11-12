@@ -313,7 +313,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             current_file = self.original_path.as_ref().to_path_buf();
         }
 
-        print!("{}", current_file.to_str().unwrap());
         let image_file = image::open(&current_file)?;
         let width = image_file.width();
         let height = image_file.height();
