@@ -72,19 +72,8 @@ use std::thread;
 pub mod compressor;
 pub mod crawler;
 pub mod dir;
-
 pub use compressor::Factor;
 
-fn default_cal_func(_width: u32, _height: u32, file_size: u64) -> Factor {
-    match file_size {
-        file_size if file_size > 5000000 => Factor::new(60., 0.7),
-        file_size if file_size > 1000000 => Factor::new(65., 0.75),
-        file_size if file_size > 500000 => Factor::new(70., 0.8),
-        file_size if file_size > 300000 => Factor::new(75., 0.85),
-        file_size if file_size > 100000 => Factor::new(80., 0.9),
-        _ => Factor::new(85., 1.0),
-    }
-}
 
 fn try_send_message<T: ToString>(sender: &Option<Sender<T>>, message: T) {
     match sender {
@@ -102,7 +91,7 @@ fn send_message<T: ToString>(sender: &Sender<T>, message: T) {
 
 /// Compressor struct for a directory.
 pub struct FolderCompressor {
-    calculate_quality_and_size: Arc<fn(u32, u32, u64) -> Factor>,
+    factor: Factor,
     original_path: PathBuf,
     destination_path: PathBuf,
     thread_count: u32,
@@ -128,7 +117,7 @@ impl FolderCompressor {
     /// ```
     pub fn new<O: AsRef<Path>, D: AsRef<Path>>(origin_path: O, dest_path: D) -> Self {
         FolderCompressor {
-            calculate_quality_and_size: Arc::new(default_cal_func),
+            factor: Factor::default(),
             original_path: origin_path.as_ref().to_path_buf(),
             destination_path: dest_path.as_ref().to_path_buf(),
             thread_count: 1,
@@ -137,22 +126,15 @@ impl FolderCompressor {
         }
     }
 
-    /// Setter for calculation function that return a Factor using to compress images.
-    ///
-    /// # Examples
-    /// ```
-    /// use image_compressor::FolderCompressor;
-    /// use image_compressor::Factor;
-    /// use std::path::Path;
-    ///
-    /// let origin = Path::new("origin");
-    /// let dest = Path::new("dest");
-    ///
-    /// let mut comp = FolderCompressor::new(origin, dest);
-    /// comp.set_cal_func(|width, height, file_size| {return Factor::new(75., 0.7)});
-    /// ```
+    
+    #[deprecated(since = "1.3.0", note = "Use just `set_factor` method instead this.")]
     pub fn set_cal_func(&mut self, cal_func: fn(u32, u32, u64) -> Factor) {
-        self.calculate_quality_and_size = Arc::new(cal_func);
+        self.factor = cal_func(0, 0, 0);
+    }
+
+    /// Set the factor for the quality and scale of the image.
+    pub fn set_factor(&mut self, factor: Factor) {
+        self.factor = factor;
     }
 
     /// Set whether to delete original files.
@@ -224,7 +206,7 @@ impl FolderCompressor {
             let arc_root = Arc::clone(&arc_root);
             let arc_dest = Arc::clone(&arc_dest);
             let arc_queue = Arc::clone(&queue);
-            let arc_cal_func = Arc::clone(&self.calculate_quality_and_size);
+            let arc_factor = Arc::new(self.factor);
             let handle = match self.sender {
                 Some(ref s) => {
                     let new_s = s.clone();
@@ -234,7 +216,7 @@ impl FolderCompressor {
                             &arc_root,
                             &arc_dest,
                             self.delete_original,
-                            *arc_cal_func,
+                            *arc_factor.clone(),
                             new_s,
                         );
                     })
@@ -245,7 +227,7 @@ impl FolderCompressor {
                         &arc_root,
                         &arc_dest,
                         self.delete_original,
-                        *arc_cal_func,
+                        *arc_factor.clone(),
                     );
                 }),
             };
@@ -273,7 +255,7 @@ impl FolderCompressor {
         Ok(())
     }
 
-    #[deprecated(since = "1.2.0", note = "Use just `compress` method instead this")]
+    #[deprecated(since = "1.2.0", note = "Use just `compress` method instead this.")]
     pub fn compress_with_sender(self, sender: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
         let to_comp_file_list = get_file_list(&self.original_path)?;
         send_message(
@@ -293,14 +275,14 @@ impl FolderCompressor {
             let arc_root = Arc::clone(&arc_root);
             let arc_dest = Arc::clone(&arc_dest);
             let arc_queue = Arc::clone(&queue);
-            let arc_cal_func = Arc::clone(&self.calculate_quality_and_size);
+            let arc_factor = Arc::new(self.factor);
             let handle = thread::spawn(move || {
                 process_with_sender(
                     arc_queue,
                     &arc_root,
                     &arc_dest,
                     self.delete_original,
-                    *arc_cal_func,
+                    *arc_factor.clone(),
                     new_sender,
                 );
             });
@@ -331,7 +313,7 @@ fn process(
     root: &Path,
     dest: &Path,
     to_delete_original: bool,
-    cal_func: fn(u32, u32, u64) -> Factor,
+    factor: Factor,
 ) {
     while !queue.is_empty() {
         match queue.pop() {
@@ -367,7 +349,8 @@ fn process(
                         }
                     };
                 }
-                let mut compressor = Compressor::new(&file, new_dest_dir, cal_func);
+                let mut compressor = Compressor::new(&file, new_dest_dir);
+                compressor.set_factor(factor);
                 compressor.set_delete_origin(to_delete_original);
                 match compressor.compress_to_jpg() {
                     Ok(_) => {
@@ -387,7 +370,7 @@ fn process_with_sender(
     root: &Path,
     dest: &Path,
     to_delete_original: bool,
-    cal_func: fn(u32, u32, u64) -> Factor,
+    factor: Factor,
     sender: mpsc::Sender<String>,
 ) {
     while !queue.is_empty() {
@@ -424,7 +407,8 @@ fn process_with_sender(
                         }
                     };
                 }
-                let mut compressor = Compressor::new(&file, new_dest_dir, cal_func);
+                let mut compressor = Compressor::new(&file, new_dest_dir);
+                compressor.set_factor(factor);
                 compressor.set_delete_origin(to_delete_original);
                 match compressor.compress_to_jpg() {
                     Ok(p) => send_message(
@@ -491,4 +475,5 @@ mod tests {
         assert_eq!(origin_file_list, dest_file_list);
         cleanup(4);
     }
+
 }

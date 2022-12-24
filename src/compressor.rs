@@ -74,6 +74,7 @@ where
 /// based on the size of image(width and height) and file size.
 ///
 /// The recommended range of quality is 60 to 80.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Factor {
     /// Quality of the new compressed image.
     /// Values range from 0 to 100 in float.
@@ -117,10 +118,19 @@ impl Factor {
     }
 }
 
+impl Default for Factor {
+    fn default() -> Self {
+        Self {
+            quality: 80.,
+            size_ratio: 0.8,
+        }
+    }
+}
+
 /// Compressor struct.
 ///
 pub struct Compressor<O: AsRef<Path>, D: AsRef<Path>> {
-    calculate_quality_and_size: fn(u32, u32, u64) -> Factor,
+    factor: Factor,
     original_path: O,
     destination_path: D,
     delete_orininal: bool,
@@ -143,13 +153,18 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
     ///
     /// let compressor = Compressor::new(origin_dir, dest_dir, |width, height, file_size| {return Factor::new(75., 0.7)});
     /// ```
-    pub fn new(origin_dir: O, dest_dir: D, cal_factor_func: fn(u32, u32, u64) -> Factor) -> Self {
+    pub fn new(origin_dir: O, dest_dir: D) -> Self {
         Compressor {
-            calculate_quality_and_size: cal_factor_func,
+            factor: Factor::default(),
             original_path: origin_dir,
             destination_path: dest_dir,
             delete_orininal: false,
         }
+    }
+
+    /// Set factor for the new compressed image.
+    pub fn set_factor(&mut self, factor: Factor) {
+        self.factor = factor;
     }
 
     /// Sets whether the program deletes the original file.
@@ -293,11 +308,9 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         let mut converted_file: Option<PathBuf> = None;
 
-        let current_file;
         if file_extension.ne("jpg") && file_extension.ne("jpeg") {
             match self.convert_to_jpg() {
                 Ok(p) => {
-                    current_file = (&p).to_path_buf();
                     converted_file = Some(p);
                 }
                 Err(e) => {
@@ -309,28 +322,15 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
                     return Err(Box::new(io::Error::new(ErrorKind::InvalidData, m)));
                 }
             };
-        } else {
-            current_file = self.original_path.as_ref().to_path_buf();
-        }
-
-        let image_file = image::open(&current_file)?;
-        let width = image_file.width();
-        let height = image_file.height();
-        let file_size = match origin_file_path.metadata() {
-            Ok(m) => m.len(),
-            Err(_) => 0,
-        };
-
-        // Calculate factor.
-        let factor = (self.calculate_quality_and_size)(width, height, file_size);
+        } 
 
         let (resized_img_data, target_width, target_height) =
-            self.resize(origin_file_path, factor.size_ratio())?;
+            self.resize(origin_file_path, self.factor.size_ratio())?;
         let compressed_img_data = self.compress(
             resized_img_data,
             target_width,
             target_height,
-            factor.quality(),
+            self.factor.quality(),
         )?;
 
         let mut file = BufWriter::new(File::create(&target_file)?);
@@ -397,9 +397,7 @@ mod tests {
         .unwrap();
         let compressor = Compressor::new(
             test_origin_dir.join("file1.png"),
-            &test_dest_dir,
-            |_, _, _| return Factor::new(70., 0.7),
-        );
+            &test_dest_dir);
         assert_eq!(
             compressor.convert_to_jpg().unwrap(),
             test_origin_dir.join("file1.jpg")
@@ -412,9 +410,7 @@ mod tests {
         .unwrap();
         let compressor = Compressor::new(
             test_origin_dir.join("file5.webp"),
-            &test_dest_dir,
-            |_, _, _| return Factor::new(70., 0.7),
-        );
+            &test_dest_dir);
         assert_eq!(
             compressor.convert_to_jpg().unwrap(),
             test_origin_dir.join("file5.jpg")
@@ -432,11 +428,7 @@ mod tests {
 
         let compressor = Compressor::new(
             test_origin_dir.join("file4.jpg"),
-            test_dest_dir,
-            |_, _, _| {
-                return Factor::new(75., 0.7);
-            },
-        );
+            test_dest_dir);
 
         compressor.compress_to_jpg().unwrap();
 
@@ -460,11 +452,7 @@ mod tests {
 
         let compressor = Compressor::new(
             (&test_origin_dir).join("file7.txt"),
-            &test_dest_dir,
-            |_, _, _| {
-                return Factor::new(75., 0.7);
-            },
-        );
+            &test_dest_dir);
         assert!(compressor.compress_to_jpg().is_err());
         assert!(test_dest_dir.join("file7.txt").is_file());
         cleanup(3);
@@ -502,9 +490,7 @@ mod tests {
 
         let mut compressor = Compressor::new(
             test_origin_dir.join("file2.jpg"),
-            test_dest_dir,
-            |_, _, _| return Factor::new(75., 0.7),
-        );
+            test_dest_dir);
         compressor.set_delete_origin(true);
         compressor.compress_to_jpg().unwrap();
         cleanup(9);
