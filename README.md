@@ -2,12 +2,12 @@
 
 [![Crates.io](https://img.shields.io/crates/v/image_compressor.svg)](https://crates.io/crates/image_compressor)  [![Documentation](https://docs.rs/image/badge.svg)](https://docs.rs/image_compressor/)
 
-A library for resize and compress images to jpg.
+A library for resizing and compressing images to **jpg**.
 
 ## Features
 
 - Compress and resize a single image to jpg format. 
-- Compress and resize multiple images of certain directory. 
+- Compress and resize multiple images in certain directory. 
 - Compress and resize images with multithreading. 
 - Customize the quality and size of compressed images. 
 - Send a completion message via `mpsc::Sender` (see [Using Message Passing to Transfer Data Between Threads](https://doc.rust-lang.org/book/ch16-02-message-passing.html) in rust tutorial).
