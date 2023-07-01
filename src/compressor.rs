@@ -359,6 +359,41 @@ mod tests {
 
     use super::*;
 
+    use image::{ImageBuffer, Rgb, RgbImage};
+    use rand::Rng;
+    use super::*;
+    use std::path::{Path, PathBuf};
+
+    const CRAWLER_TEST_DIR: &str = "crawler_test_dir";
+    const CRAWLER_TEST_FILE_1: &str = "file1.txt";
+    
+    /// Setup the test.
+    fn setup2() -> PathBuf {
+        let dir_data = PathBuf::from(CRAWLER_TEST_DIR);
+        fs::create_dir_all(&dir_data).unwrap();
+        const WIDTH: u32 = 256;
+        const HEIGHT: u32 = 256;
+        // let mut ima: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
+        // *img.get_pixel_mut(5, 5) = image::Rgb([255,255,255]);
+        let img_stripe = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, _| {
+            if x % 2 == 0 {
+                image::Luma([0u8])
+            } else {
+                image::Luma([255u8])
+            }
+        });
+        img_stripe.save(dir_data.join("img_stripe.png")).unwrap();
+        let img_random_rgb = ImageBuffer::from_fn(WIDTH, HEIGHT, |_, _| {
+            let r = rand::thread_rng().gen_range(0..256) as u8;
+            let g = rand::thread_rng().gen_range(0..256) as u8;
+            let b = rand::thread_rng().gen_range(0..256) as u8;
+            image::Rgb([r, g, b])
+        });
+        img_random_rgb.save(dir_data.join("img_random_rgb.png")).unwrap();
+
+        dir_data
+    }
+
     fn setup(test_num: i32) -> (i32, PathBuf, PathBuf) {
         let test_origin_dir = PathBuf::from(&format!("{}{}", "test_origin", test_num));
         if test_origin_dir.is_dir() {
