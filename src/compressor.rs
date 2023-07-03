@@ -26,6 +26,8 @@ use std::io::{BufWriter, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
+
+/// Why does this function exist?
 fn delete_duplicate_file<O: AsRef<Path>>(file_path: O) -> Result<O, Box<dyn Error>>
 where
     std::path::PathBuf: PartialEq<O>,
@@ -308,10 +310,12 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         let mut converted_file: Option<PathBuf> = None;
 
+        let current_file;
         if file_extension.ne("jpg") && file_extension.ne("jpeg") {
-            match self.convert_to_jpg() {
+            converted_file = match self.convert_to_jpg() {
                 Ok(p) => {
-                    converted_file = Some(p);
+                    current_file = (&p).to_path_buf();
+                    Some(p)
                 }
                 Err(e) => {
                     let m = format!(
@@ -339,7 +343,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         // Delete duplicate file which is converted from original one.
         match converted_file {
             Some(p) => {
-                delete_duplicate_file(p)?;
+                //delete_duplicate_file(p)?;
             }
             None => {}
         }
