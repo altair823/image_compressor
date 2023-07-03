@@ -364,39 +364,10 @@ mod tests {
     use rand::Rng;
     use std::path::{Path, PathBuf};
 
-    const COMPRESSOR_TEST_DIR: &str = "comporessor_test_dir";
-    const COMPRESSOR_TEST_FILE_1: &str = "file1.png";
-    
-    /// Setup the test.
-    fn setup2() -> PathBuf {
-        let dir_data = PathBuf::from(COMPRESSOR_TEST_DIR);
-        fs::create_dir_all(&dir_data).unwrap();
-        const WIDTH: u32 = 256;
-        const HEIGHT: u32 = 256;
-        // let mut ima: RgbImage = ImageBuffer::new(WIDTH, HEIGHT);
-        // *img.get_pixel_mut(5, 5) = image::Rgb([255,255,255]);
-        let img_stripe = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, _| {
-            if x % 2 == 0 {
-                image::Luma([0u8])
-            } else {
-                image::Luma([255u8])
-            }
-        });
-        img_stripe.save(dir_data.join("img_stripe.png")).unwrap();
-        let img_random_rgb = ImageBuffer::from_fn(WIDTH, HEIGHT, |_, _| {
-            let r = rand::thread_rng().gen_range(0..256) as u8;
-            let g = rand::thread_rng().gen_range(0..256) as u8;
-            let b = rand::thread_rng().gen_range(0..256) as u8;
-            image::Rgb([r, g, b])
-        });
-        img_random_rgb.save(dir_data.join("img_random_rgb.png")).unwrap();
-
-        dir_data
-    }
 
     /// Create test directory and a image file in it. 
-    fn setup() -> (PathBuf, Vec<PathBuf>) {
-        let test_dir = PathBuf::from(COMPRESSOR_TEST_DIR);
+    fn setup(test_name: &str) -> (PathBuf, Vec<PathBuf>) {
+        let test_dir = PathBuf::from(test_name);
         if test_dir.is_dir() {
             fs::remove_dir_all(&test_dir).unwrap();
         }
@@ -419,7 +390,7 @@ mod tests {
             let b = rand::thread_rng().gen_range(0..256) as u8;
             image::Rgb([r, g, b])
         });
-        let rgb_path = test_dir.join("img_random_rgb.png");
+        let rgb_path = test_dir.join("img_random_rgb.gif");
         img_random_rgb.save(&rgb_path).unwrap();
 
         (test_dir, vec![stripe_path, rgb_path])
@@ -433,74 +404,44 @@ mod tests {
 
     #[test]
     fn convert_to_jpg_test() {
-        let (test_dir, image_files) = setup();
-
-        let compressor = Compressor::new(
-            &image_files[0],
-            &test_dir,
-            |_, _, _| return Factor::new(70., 0.7),
-        );
-        let result = compressor.convert_to_jpg().unwrap();
-        assert_eq!(Reader::open(result).unwrap().with_guessed_format().unwrap().format().unwrap(), ImageFormat::Jpeg);
+        const COMPRESSOR_TEST_DIR: &str = "convert_to_jpg_test_dir";
         
-        let compressor = Compressor::new(
-            &image_files[1],
-            &test_dir,
-            |_, _, _| return Factor::new(70., 0.7),
-        );
-        compressor.convert_to_jpg().unwrap();
-        let result = compressor.convert_to_jpg().unwrap();
-        assert_eq!(Reader::open(result).unwrap().with_guessed_format().unwrap().format().unwrap(), ImageFormat::Jpeg);
+        let (test_dir, test_images) = setup(COMPRESSOR_TEST_DIR);
+
+        for test_image in &test_images {
+            let compressor = Compressor::new(
+                test_image,
+                &test_dir,
+                |_, _, _| return Factor::new(70., 0.7),
+            );
+            let result = compressor.convert_to_jpg().unwrap();
+            assert_eq!(Reader::open(result).unwrap().with_guessed_format().unwrap().format().unwrap(), ImageFormat::Jpeg);
+        }
         cleanup(test_dir);
     }
 
-    // #[test]
-    // fn compress_a_image_test() {
-    //     let (_, test_origin_dir, test_dest_dir) = setup(2);
-    //     let test_origin_path = test_origin_dir.join("file4.jpg");
-    //     let test_dest_path = test_dest_dir.join("file4.jpg");
+    #[test]
+    fn skip_wrong_ext_test() {
+        const COMPRESSOR_TEST_DIR: &str = "skip_wrong_ext_test_dir";
+        let (test_dir, _) = setup(COMPRESSOR_TEST_DIR);
+        let txt_data = "Hello, World!";
+        let mut txt_path = PathBuf::from(COMPRESSOR_TEST_DIR).join("skip_wrong_ext_test.txt");
+        let mut txt_file = File::create(&txt_path).unwrap();
+        write!(txt_file, "{}", txt_data).unwrap();
 
-    //     fs::copy(Path::new("original_images/file4.jpg"), &test_origin_path).unwrap();
-
-    //     let compressor = Compressor::new(
-    //         test_origin_dir.join("file4.jpg"),
-    //         test_dest_dir,
-    //         |_, _, _| {
-    //             return Factor::new(75., 0.7);
-    //         },
-    //     );
-
-    //     compressor.compress_to_jpg().unwrap();
-
-    //     assert!(test_dest_path.is_file());
-    //     println!(
-    //         "Original file size: {}, Compressed file size: {}",
-    //         &test_origin_path.metadata().unwrap().len(),
-    //         test_dest_path.metadata().unwrap().len()
-    //     );
-    //     cleanup(2);
-    // }
-
-    // #[test]
-    // fn compress_to_jpg_copy_test() {
-    //     let (_, test_origin_dir, test_dest_dir) = setup(3);
-    //     fs::copy(
-    //         "original_images/file7.txt",
-    //         test_origin_dir.join("file7.txt"),
-    //     )
-    //     .unwrap();
-
-    //     let compressor = Compressor::new(
-    //         (&test_origin_dir).join("file7.txt"),
-    //         &test_dest_dir,
-    //         |_, _, _| {
-    //             return Factor::new(75., 0.7);
-    //         },
-    //     );
-    //     assert!(compressor.compress_to_jpg().is_err());
-    //     assert!(test_dest_dir.join("file7.txt").is_file());
-    //     cleanup(3);
-    // }
+        let compressor = Compressor::new(
+            &txt_path,
+            &test_dir,
+            |_, _, _| {
+                return Factor::new(75., 0.7);
+            },
+        );
+        assert!(compressor.compress_to_jpg().is_err());
+        assert!(txt_path.is_file());
+        txt_path.set_extension("jpg");
+        assert!(!txt_path.is_file());
+        cleanup(test_dir);
+    }
 
     // #[test]
     // fn delete_duplicate_file_test() {
