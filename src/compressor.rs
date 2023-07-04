@@ -28,6 +28,8 @@ use std::{fs, io};
 
 
 /// Why does this function exist?
+
+/// Why does this function exist?
 fn delete_duplicate_file<O: AsRef<Path>>(file_path: O) -> Result<O, Box<dyn Error>>
 where
     std::path::PathBuf: PartialEq<O>,
@@ -292,6 +294,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let mut target_file_name = PathBuf::from(file_stem);
         target_file_name.set_extension("jpg");
         let target_file = target_dir.join(&target_file_name);
+        let target_file = target_dir.join(&target_file_name);
         if target_file.is_file() {
             return Err(Box::new(io::Error::new(
                 ErrorKind::AlreadyExists,
@@ -305,6 +308,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let mut converted_file: Option<PathBuf> = None;
 
         if file_extension.ne("jpg") && file_extension.ne("jpeg") {
+            converted_file = match self.convert_to_jpg() {
             converted_file = match self.convert_to_jpg() {
                 Ok(p) => {
                     Some(p)
@@ -337,6 +341,10 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
                 fs::remove_file(c)?; 
             },
             None => (),
+            Some(c) => {
+                fs::remove_file(c)?; 
+            },
+            None => (),
         }
 
         // Delete the original file when the flag is true.
@@ -365,9 +373,47 @@ mod tests {
         let test_dir = test_name.as_ref().to_path_buf();
         if test_dir.is_dir() {
             fs::remove_dir_all(&test_dir).unwrap();
+    use image::{ImageBuffer, io::Reader, ImageFormat};
+    use colorgrad;
+    use rand::Rng;
+    use std::path::{Path, PathBuf};
+
+
+    /// Create test directory and a image file in it. 
+    fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
+        let test_dir = test_name.as_ref().to_path_buf();
+        if test_dir.is_dir() {
+            fs::remove_dir_all(&test_dir).unwrap();
         }
         fs::create_dir_all(&test_dir).unwrap();
+        fs::create_dir_all(&test_dir).unwrap();
 
+        const WIDTH: u32 = 256;
+        const HEIGHT: u32 = 256;
+        let img_stripe = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, _| {
+            if x % 2 == 0 {
+                image::Luma([0u8])
+            } else {
+                image::Luma([255u8])
+            }
+        });
+        let stripe_path = test_dir.join("img_stripe.png");
+        img_stripe.save(&stripe_path).unwrap();
+        let img_random_rgb = ImageBuffer::from_fn(WIDTH, HEIGHT, |_, _| {
+            let r = rand::thread_rng().gen_range(0..256) as u8;
+            let g = rand::thread_rng().gen_range(0..256) as u8;
+            let b = rand::thread_rng().gen_range(0..256) as u8;
+            image::Rgb([r, g, b])
+        });
+        let rgb_path = test_dir.join("img_random_rgb.gif");
+        img_random_rgb.save(&rgb_path).unwrap();
+        let grad = colorgrad::CustomGradient::new()
+        .html_colors(&["deeppink", "gold", "seagreen"])
+        .build().unwrap();
+        let mut img_jpg = ImageBuffer::new(WIDTH, HEIGHT);
+        for (x, _, pixel) in img_jpg.enumerate_pixels_mut() {
+            let rgba = grad.at(x as f64 / WIDTH as f64).to_rgba8();
+            *pixel = image::Rgba(rgba);
         const WIDTH: u32 = 256;
         const HEIGHT: u32 = 256;
         let img_stripe = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, _| {
@@ -397,10 +443,16 @@ mod tests {
         }
         let jpg_path = test_dir.join("img_jpg.jpg");
         img_jpg.save(&jpg_path).unwrap();
+        let jpg_path = test_dir.join("img_jpg.jpg");
+        img_jpg.save(&jpg_path).unwrap();
 
+        (test_dir, vec![stripe_path, rgb_path, jpg_path])
         (test_dir, vec![stripe_path, rgb_path, jpg_path])
     }
 
+    fn cleanup<T: AsRef<Path>>(test_dir: T) {
+        if test_dir.as_ref().is_dir() {
+            fs::remove_dir_all(&test_dir).unwrap();
     fn cleanup<T: AsRef<Path>>(test_dir: T) {
         if test_dir.as_ref().is_dir() {
             fs::remove_dir_all(&test_dir).unwrap();
@@ -409,6 +461,7 @@ mod tests {
 
     #[test]
     fn convert_to_jpg_test() {
+        let (test_dir, test_images) = setup("convert_to_jpg_test_dir");
         let (test_dir, test_images) = setup("convert_to_jpg_test_dir");
 
         for test_image in &test_images {
@@ -429,6 +482,12 @@ mod tests {
         let mut txt_path = PathBuf::from(&test_dir).join("skip_wrong_ext_test.txt");
         let mut txt_file = File::create(&txt_path).unwrap();
         write!(txt_file, "{}", txt_data).unwrap();
+    fn skip_wrong_ext_test() {
+        let (test_dir, _) = setup("skip_wrong_ext_test_dir");
+        let txt_data = "Hello, World!";
+        let mut txt_path = PathBuf::from(&test_dir).join("skip_wrong_ext_test.txt");
+        let mut txt_file = File::create(&txt_path).unwrap();
+        write!(txt_file, "{}", txt_data).unwrap();
 
         let compressor = Compressor::new(
             &txt_path,
@@ -439,12 +498,20 @@ mod tests {
         txt_path.set_extension("jpg");
         assert!(!txt_path.is_file());
         cleanup(test_dir);
+        assert!(txt_path.is_file());
+        txt_path.set_extension("jpg");
+        assert!(!txt_path.is_file());
+        cleanup(test_dir);
     }
 
     #[test]
     fn compress_to_jpg_test() {
         let (test_dir, mut test_images) = setup("compress_to_jpg_test");
+    fn compress_to_jpg_test() {
+        let (test_dir, mut test_images) = setup("compress_to_jpg_test");
 
+        let dest_dir = PathBuf::from("compress_to_jpg_dest_dir");
+        fs::create_dir_all(&dest_dir).unwrap();
         let dest_dir = PathBuf::from("compress_to_jpg_dest_dir");
         fs::create_dir_all(&dest_dir).unwrap();
 
