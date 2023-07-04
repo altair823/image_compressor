@@ -432,41 +432,9 @@ mod tests {
         let test_dir = test_name.as_ref().to_path_buf();
         if test_dir.is_dir() {
             fs::remove_dir_all(&test_dir).unwrap();
-    /// Create test directory and a image file in it. 
-    fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
-        let test_dir = test_name.as_ref().to_path_buf();
-        if test_dir.is_dir() {
-            fs::remove_dir_all(&test_dir).unwrap();
         }
         fs::create_dir_all(&test_dir).unwrap();
-        fs::create_dir_all(&test_dir).unwrap();
 
-        const WIDTH: u32 = 256;
-        const HEIGHT: u32 = 256;
-        let img_stripe = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, _| {
-            if x % 2 == 0 {
-                image::Luma([0u8])
-            } else {
-                image::Luma([255u8])
-            }
-        });
-        let stripe_path = test_dir.join("img_stripe.png");
-        img_stripe.save(&stripe_path).unwrap();
-        let img_random_rgb = ImageBuffer::from_fn(WIDTH, HEIGHT, |_, _| {
-            let r = rand::thread_rng().gen_range(0..256) as u8;
-            let g = rand::thread_rng().gen_range(0..256) as u8;
-            let b = rand::thread_rng().gen_range(0..256) as u8;
-            image::Rgb([r, g, b])
-        });
-        let rgb_path = test_dir.join("img_random_rgb.gif");
-        img_random_rgb.save(&rgb_path).unwrap();
-        let grad = colorgrad::CustomGradient::new()
-        .html_colors(&["deeppink", "gold", "seagreen"])
-        .build().unwrap();
-        let mut img_jpg = ImageBuffer::new(WIDTH, HEIGHT);
-        for (x, _, pixel) in img_jpg.enumerate_pixels_mut() {
-            let rgba = grad.at(x as f64 / WIDTH as f64).to_rgba8();
-            *pixel = image::Rgba(rgba);
         const WIDTH: u32 = 256;
         const HEIGHT: u32 = 256;
         let img_stripe = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, _| {
@@ -496,16 +464,9 @@ mod tests {
         }
         let jpg_path = test_dir.join("img_jpg.jpg");
         img_jpg.save(&jpg_path).unwrap();
-        let jpg_path = test_dir.join("img_jpg.jpg");
-        img_jpg.save(&jpg_path).unwrap();
-
-        (test_dir, vec![stripe_path, rgb_path, jpg_path])
         (test_dir, vec![stripe_path, rgb_path, jpg_path])
     }
 
-    fn cleanup<T: AsRef<Path>>(test_dir: T) {
-        if test_dir.as_ref().is_dir() {
-            fs::remove_dir_all(&test_dir).unwrap();
     fn cleanup<T: AsRef<Path>>(test_dir: T) {
         if test_dir.as_ref().is_dir() {
             fs::remove_dir_all(&test_dir).unwrap();
@@ -524,15 +485,6 @@ mod tests {
         let mut folder_compressor = FolderCompressor::new(&test_source_dir, &test_dest_dir);
         folder_compressor.set_thread_count(4);
         folder_compressor.compress().unwrap();
-        let a = get_file_list(&test_source_dir).unwrap();
-        let b = get_file_list(&test_dest_dir).unwrap();
-        let mut source_file_list = a.iter().map(|i| i.file_stem().unwrap()).collect::<Vec<_>>();
-        let mut dest_file_list = b.iter().map(|i| i.file_stem().unwrap()).collect::<Vec<_>>();
-        source_file_list.sort();
-        dest_file_list.sort();
-        assert_eq!(source_file_list, dest_file_list);
-        cleanup(test_source_dir);
-        cleanup(test_dest_dir);
         let a = get_file_list(&test_source_dir).unwrap();
         let b = get_file_list(&test_dest_dir).unwrap();
         let mut source_file_list = a.iter().map(|i| i.file_stem().unwrap()).collect::<Vec<_>>();

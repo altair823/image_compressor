@@ -73,8 +73,6 @@ pub fn delete_recursive<O: AsRef<Path>>(dir: O) -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fs_extra::dir;
-    use fs_extra::dir::CopyOptions;
     use std::fs;
     use std::path::PathBuf;
     use std::fs::File;
