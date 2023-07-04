@@ -309,7 +309,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         if file_extension.ne("jpg") && file_extension.ne("jpeg") {
             converted_file = match self.convert_to_jpg() {
-            converted_file = match self.convert_to_jpg() {
                 Ok(p) => {
                     Some(p)
                 }
