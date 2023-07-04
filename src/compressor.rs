@@ -362,12 +362,12 @@ mod tests {
 
 
     /// Create test directory and a image file in it. 
-    fn setup(test_name: &str) -> (PathBuf, Vec<PathBuf>) {
-        let test_dir = PathBuf::from(test_name);
+    fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
+        let test_dir = test_name.as_ref().to_path_buf();
         if test_dir.is_dir() {
             fs::remove_dir_all(&test_dir).unwrap();
         }
-        fs::create_dir_all(&test_dir.as_path()).unwrap();
+        fs::create_dir_all(&test_dir).unwrap();
 
         const WIDTH: u32 = 256;
         const HEIGHT: u32 = 256;
@@ -410,9 +410,7 @@ mod tests {
 
     #[test]
     fn convert_to_jpg_test() {
-        const COMPRESSOR_TEST_DIR: &str = "convert_to_jpg_test_dir";
-        
-        let (test_dir, test_images) = setup(COMPRESSOR_TEST_DIR);
+        let (test_dir, test_images) = setup("convert_to_jpg_test_dir");
 
         for test_image in &test_images {
             let compressor = Compressor::new(
@@ -429,10 +427,9 @@ mod tests {
 
     #[test]
     fn skip_wrong_ext_test() {
-        const COMPRESSOR_TEST_DIR: &str = "skip_wrong_ext_test_dir";
-        let (test_dir, _) = setup(COMPRESSOR_TEST_DIR);
+        let (test_dir, _) = setup("skip_wrong_ext_test_dir");
         let txt_data = "Hello, World!";
-        let mut txt_path = PathBuf::from(COMPRESSOR_TEST_DIR).join("skip_wrong_ext_test.txt");
+        let mut txt_path = PathBuf::from(&test_dir).join("skip_wrong_ext_test.txt");
         let mut txt_file = File::create(&txt_path).unwrap();
         write!(txt_file, "{}", txt_data).unwrap();
 
@@ -452,8 +449,7 @@ mod tests {
 
     #[test]
     fn compress_to_jpg_test() {
-        const COMPRESSOR_TEST_DIR: &str = "compress_to_jpg_test";
-        let (test_dir, mut test_images) = setup(COMPRESSOR_TEST_DIR);
+        let (test_dir, mut test_images) = setup("compress_to_jpg_test");
 
         let dest_dir = PathBuf::from("compress_to_jpg_dest_dir");
         fs::create_dir_all(&dest_dir).unwrap();
