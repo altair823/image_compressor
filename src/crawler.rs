@@ -66,7 +66,7 @@ pub fn get_dir_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
 
 
     use super::*;
@@ -74,8 +74,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::{fs, io};
     use std::io::Write;
-
-    const CRAWLER_TEST_DIR: &str = "crawler_test_dir";
+    
     const CRAWLER_TEST_FILES: &'static [&str] = &["file1.txt", "file2.txt", "file3.txt", "file4.txt", "file5.txt"];
 
     /// Create dummy test files. 
@@ -89,8 +88,8 @@ mod tests {
     }
 
     /// Setup the test and return a tuple of root directory and file name vector.
-    fn setup() -> (PathBuf, Vec<PathBuf>) {
-        let dir_data = PathBuf::from(CRAWLER_TEST_DIR);
+    pub fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
+        let dir_data = test_name.as_ref().to_path_buf();
         let files = vec![
             dir_data.join(CRAWLER_TEST_FILES[0]),
             dir_data.join("dir1").join(CRAWLER_TEST_FILES[1]),
@@ -104,19 +103,19 @@ mod tests {
         (dir_data, files)
     }
 
-    /// Clean up test env. 
-    /// Remove all test directories. 
-    fn cleanup() {
-        fs::remove_dir_all(CRAWLER_TEST_DIR).unwrap();
+    fn cleanup<T: AsRef<Path>>(test_dir: T) {
+        if test_dir.as_ref().is_dir() {
+            fs::remove_dir_all(&test_dir).unwrap();
+        }
     }
 
     #[test]
     fn get_file_list_test() {
-        let (test_dir, mut expected_vec) = setup();
+        let (test_dir, mut expected_vec) = setup("get_file_list_test_dir");
         let mut test_vec = get_file_list(&test_dir).unwrap();
         test_vec.sort();
         expected_vec.sort();
         assert_eq!(test_vec, expected_vec);
-        cleanup();
+        cleanup(test_dir);
     }
 }
