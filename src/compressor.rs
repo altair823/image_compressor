@@ -291,13 +291,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         let mut target_file_name = PathBuf::from(file_stem);
         target_file_name.set_extension("jpg");
-        let target_file = target_dir.join(target_file_name);
-        if target_dir.join(file_name).is_file() {
-            return Err(Box::new(io::Error::new(
-                ErrorKind::AlreadyExists,
-                format!("The file is already existed! file: {}", file_name),
-            )));
-        }
+        let target_file = target_dir.join(&target_file_name);
         if target_file.is_file() {
             return Err(Box::new(io::Error::new(
                 ErrorKind::AlreadyExists,
@@ -310,11 +304,9 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         let mut converted_file: Option<PathBuf> = None;
 
-        let current_file;
         if file_extension.ne("jpg") && file_extension.ne("jpeg") {
             converted_file = match self.convert_to_jpg() {
                 Ok(p) => {
-                    current_file = (&p).to_path_buf();
                     Some(p)
                 }
                 Err(e) => {
@@ -340,12 +332,11 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let mut file = BufWriter::new(File::create(&target_file)?);
         file.write_all(&compressed_img_data)?;
 
-        // Delete duplicate file which is converted from original one.
         match converted_file {
-            Some(p) => {
-                //delete_duplicate_file(p)?;
-            }
-            None => {}
+            Some(c) => {
+                fs::remove_file(c)?; 
+            },
+            None => (),
         }
 
         // Delete the original file when the flag is true.
@@ -364,6 +355,7 @@ mod tests {
     use super::*;
 
     use image::{ImageBuffer, io::Reader, ImageFormat};
+    use colorgrad;
     use rand::Rng;
     use std::path::{Path, PathBuf};
 
@@ -395,8 +387,18 @@ mod tests {
         });
         let rgb_path = test_dir.join("img_random_rgb.gif");
         img_random_rgb.save(&rgb_path).unwrap();
+        let grad = colorgrad::CustomGradient::new()
+        .html_colors(&["deeppink", "gold", "seagreen"])
+        .build().unwrap();
+        let mut img_jpg = ImageBuffer::new(WIDTH, HEIGHT);
+        for (x, _, pixel) in img_jpg.enumerate_pixels_mut() {
+            let rgba = grad.at(x as f64 / WIDTH as f64).to_rgba8();
+            *pixel = image::Rgba(rgba);
+        }
+        let jpg_path = test_dir.join("img_jpg.jpg");
+        img_jpg.save(&jpg_path).unwrap();
 
-        (test_dir, vec![stripe_path, rgb_path])
+        (test_dir, vec![stripe_path, rgb_path, jpg_path])
     }
 
     fn cleanup<T: AsRef<Path>>(test_dir: T) {
@@ -416,7 +418,7 @@ mod tests {
                 test_image,
                 &test_dir,
             );
-            let result = compressor.convert_to_jpg().unwrap();
+            let result = compressor.convert_to_jpg().unwrap(); // Just convert, not compress. 
             assert_eq!(Reader::open(result).unwrap().with_guessed_format().unwrap().format().unwrap(), ImageFormat::Jpeg);
         }
         cleanup(test_dir);
@@ -442,43 +444,34 @@ mod tests {
         cleanup(test_dir);
     }
 
-    // #[test]
-    // fn delete_duplicate_file_test() {
-    //     let (_, test_origin_dir, _) = setup(7);
-    //     fs::copy(
-    //         "original_images/file1.png",
-    //         test_origin_dir.join("file1.png"),
-    //     )
-    //     .unwrap();
-    //     fs::copy(
-    //         "original_images/file2.jpg",
-    //         test_origin_dir.join("file2.jpg"),
-    //     )
-    //     .unwrap();
+    #[test]
+    fn compress_to_jpg_test() {
+        const COMPRESSOR_TEST_DIR: &str = "compress_to_jpg_test";
+        let (test_dir, mut test_images) = setup(COMPRESSOR_TEST_DIR);
 
-    //     match delete_duplicate_file(test_origin_dir.join("file2.jpg")) {
-    //         Ok(o) => println!("{}", o.to_str().unwrap()),
-    //         Err(e) => println!("{}", e),
-    //     }
-    //     cleanup(7);
-    // }
+        let dest_dir = PathBuf::from("compress_to_jpg_dest_dir");
+        fs::create_dir_all(&dest_dir).unwrap();
 
-    // #[test]
-    // fn delete_original_test() {
-    //     let (_, test_origin_dir, test_dest_dir) = setup(9);
-    //     fs::copy(
-    //         "original_images/file2.jpg",
-    //         test_origin_dir.join("file2.jpg"),
-    //     )
-    //     .unwrap();
-
-    //     let mut compressor = Compressor::new(
-    //         test_origin_dir.join("file2.jpg"),
-    //         test_dest_dir,
-    //         |_, _, _| return Factor::new(75., 0.7),
-    //     );
-    //     compressor.set_delete_origin(true);
-    //     compressor.compress_to_jpg().unwrap();
-    //     cleanup(9);
-    // }
+        for test_image in &test_images {
+            let mut compressor = Compressor::new(
+                test_image,
+                &dest_dir,
+            );
+            compressor.set_delete_origin(true);
+            compressor.compress_to_jpg().unwrap();
+        }
+        for test_image in &test_images {
+            assert!(!test_image.is_file());
+        }
+        test_images = test_images.iter().map(|image| {
+            dest_dir.join(image.file_name().unwrap())
+        }).collect();
+        for new_image in &test_images {
+            let mut new_test_image = new_image.clone();
+            new_test_image.set_extension("jpg");
+            assert!(new_test_image.is_file());
+        }
+        cleanup(test_dir);
+        cleanup(dest_dir);
+    }
 }
