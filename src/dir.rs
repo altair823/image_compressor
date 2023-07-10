@@ -13,31 +13,7 @@ use std::path::Path;
 /// # Error
 /// - When directory is not empty.
 /// - When the child directory is not empty.
-///
-/// # Examples
-/// ```
-/// use image_compressor::dir::delete_recursive;
-/// use std::fs;
-/// use std::path::Path;
-/// use fs_extra::dir;
-/// use fs_extra::dir::CopyOptions;
-///
-/// let test_origin_dir = Path::new("test_origin");
-/// if test_origin_dir.is_dir(){
-///     fs::remove_dir_all(test_origin_dir).unwrap();
-/// }
-/// fs::create_dir_all(test_origin_dir.join("dir1").join("dir2")).unwrap();
-/// fs::create_dir_all(test_origin_dir.join("dir3")).unwrap();
-/// let option = CopyOptions::new();
-/// dir::copy("original_images", test_origin_dir.join("dir3"), &option).unwrap();
-///
-/// // It delete only dir1, dir2 but not dir3 because dir3 is not empty.
-/// // And the function return Err.
-/// assert!(delete_recursive(test_origin_dir).is_err());
-///
-/// assert!(test_origin_dir.join("dir3").is_dir());
-/// assert!(!test_origin_dir.join("dir1").is_dir());
-/// ```
+/// 
 pub fn delete_recursive<O: AsRef<Path>>(dir: O) -> Result<(), Box<dyn Error>> {
     if dir.as_ref().is_dir() {
         let mut is_file_exist = false;
@@ -74,11 +50,17 @@ pub fn delete_recursive<O: AsRef<Path>>(dir: O) -> Result<(), Box<dyn Error>> {
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
     use std::fs::File;
     use std::io::Write;
+    use std::path::PathBuf;
 
-    const TEST_FILES: &'static [&str] = &["file1.txt", "file2.txt", "file3.txt", "file4.txt", "file5.txt"];
+    const TEST_FILES: &'static [&str] = &[
+        "file1.txt",
+        "file2.txt",
+        "file3.txt",
+        "file4.txt",
+        "file5.txt",
+    ];
 
     /// Setup the test and return a tuple of root directory and file name vector.
     pub fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
@@ -87,22 +69,35 @@ mod tests {
             dir_data.join(TEST_FILES[0]),
             dir_data.join("dir1").join(TEST_FILES[1]),
             dir_data.join("dir1").join("dir2").join(TEST_FILES[2]),
-            dir_data.join("dir1").join("dir2").join("dir3").join(TEST_FILES[3]),
-            dir_data.join("dir1").join("dir2").join("dir3").join("dir4").join(TEST_FILES[4]),
+            dir_data
+                .join("dir1")
+                .join("dir2")
+                .join("dir3")
+                .join(TEST_FILES[3]),
+            dir_data
+                .join("dir1")
+                .join("dir2")
+                .join("dir3")
+                .join("dir4")
+                .join(TEST_FILES[4]),
         ];
         for file in &files {
             write_test_file(file).unwrap();
         }
         (dir_data, files)
     }
-    
-    /// Create dummy test files. 
+
+    /// Create dummy test files.
     fn write_test_file<T: AsRef<Path>>(path: T) -> io::Result<()> {
         match &path.as_ref().parent() {
             Some(p) => fs::create_dir_all(&p).unwrap(),
             None => (),
         }
-        write!(File::create(&path)?, "{}", "Hello world for ".to_owned() + path.as_ref().to_str().unwrap())?;
+        write!(
+            File::create(&path)?,
+            "{}",
+            "Hello world for ".to_owned() + path.as_ref().to_str().unwrap()
+        )?;
         Ok(())
     }
 

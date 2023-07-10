@@ -5,10 +5,9 @@
 //! `get_file_list` example.
 //! ```
 //! use std::path::PathBuf;
-//! use image_compressor::crawler::{get_file_list, get_dir_list};
+//! use image_compressor::crawler::get_file_list;
 //! let root = PathBuf::from("root");
 //! get_file_list(&root);
-//! get_dir_list(&root);
 //! ```
 
 use std::io;
@@ -49,41 +48,34 @@ pub fn get_file_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
     Ok(image_list)
 }
 
-/// Get all directories list in the rood directory. Not recursive.
-pub fn get_dir_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
-    let cur_list: Vec<PathBuf> = root
-        .as_ref()
-        .read_dir()?
-        .map(|entry| entry.unwrap().path())
-        .collect();
-    let dir_list = cur_list
-        .iter()
-        .filter(|p| p.is_dir())
-        .map(|p| p.to_path_buf())
-        .collect::<Vec<_>>();
-
-    Ok(dir_list)
-}
-
 #[cfg(test)]
 pub mod tests {
 
-
     use super::*;
     use std::fs::File;
+    use std::io::Write;
     use std::path::{Path, PathBuf};
     use std::{fs, io};
-    use std::io::Write;
-    
-    const CRAWLER_TEST_FILES: &'static [&str] = &["file1.txt", "file2.txt", "file3.txt", "file4.txt", "file5.txt"];
 
-    /// Create dummy test files. 
+    const CRAWLER_TEST_FILES: &'static [&str] = &[
+        "file1.txt",
+        "file2.txt",
+        "file3.txt",
+        "file4.txt",
+        "file5.txt",
+    ];
+
+    /// Create dummy test files.
     fn write_test_file<T: AsRef<Path>>(path: T) -> io::Result<()> {
         match &path.as_ref().parent() {
             Some(p) => fs::create_dir_all(&p).unwrap(),
             None => (),
         }
-        write!(File::create(&path)?, "{}", "Hello world for ".to_owned() + path.as_ref().to_str().unwrap())?;
+        write!(
+            File::create(&path)?,
+            "{}",
+            "Hello world for ".to_owned() + path.as_ref().to_str().unwrap()
+        )?;
         Ok(())
     }
 
@@ -93,9 +85,21 @@ pub mod tests {
         let files = vec![
             dir_data.join(CRAWLER_TEST_FILES[0]),
             dir_data.join("dir1").join(CRAWLER_TEST_FILES[1]),
-            dir_data.join("dir1").join("dir2").join(CRAWLER_TEST_FILES[2]),
-            dir_data.join("dir1").join("dir2").join("dir3").join(CRAWLER_TEST_FILES[3]),
-            dir_data.join("dir1").join("dir2").join("dir3").join("dir4").join(CRAWLER_TEST_FILES[4]),
+            dir_data
+                .join("dir1")
+                .join("dir2")
+                .join(CRAWLER_TEST_FILES[2]),
+            dir_data
+                .join("dir1")
+                .join("dir2")
+                .join("dir3")
+                .join(CRAWLER_TEST_FILES[3]),
+            dir_data
+                .join("dir1")
+                .join("dir2")
+                .join("dir3")
+                .join("dir4")
+                .join(CRAWLER_TEST_FILES[4]),
         ];
         for file in &files {
             write_test_file(file).unwrap();

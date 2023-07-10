@@ -4,19 +4,19 @@
 //!
 //! The `compress_to_jpg` function resizes the given image and compresses it by a certain percentage.
 //! # Examples
-//! ```
+//! ```rust,no_run
 //! use std::path::PathBuf;
 //! use image_compressor::compressor::Compressor;
 //! use image_compressor::Factor;
 //!
-//! let origin_dir = PathBuf::from("origin").join("file1.jpg");
+//! let source_file = PathBuf::from("source").join("file1.jpg");
 //! let dest_dir = PathBuf::from("dest");
 //!
-//! let compressor = Compressor::new(origin_dir, dest_dir, |width, height, file_size| {return Factor::new(75., 0.7)});
+//! let mut compressor = Compressor::new(source_file, dest_dir);
+//! compressor.set_factor(Factor::new(80., 0.8));
 //! compressor.compress_to_jpg();
 //! ```
 
-use crate::get_file_list;
 use image::imageops::FilterType;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 use std::error::Error;
@@ -26,56 +26,12 @@ use std::io::{BufWriter, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-
-/// Why does this function exist?
-
-/// Why does this function exist?
-fn delete_duplicate_file<O: AsRef<Path>>(file_path: O) -> Result<O, Box<dyn Error>>
-where
-    std::path::PathBuf: PartialEq<O>,
-{
-    let current_dir_file_list = match get_file_list(file_path.as_ref().parent().unwrap()) {
-        Ok(mut v) => {
-            if let Some(index) = v.iter().position(|x| *x == file_path) {
-                v.remove(index);
-            }
-            v
-        }
-        Err(e) => {
-            return Err(Box::new(e));
-        }
-    };
-
-    let mut current_dir_file_list = current_dir_file_list
-        .iter()
-        .map(|p| p.file_stem().unwrap().to_str().unwrap());
-    let t = file_path.as_ref().file_stem().unwrap().to_str().unwrap();
-    if !current_dir_file_list.any(|x| x == t) {
-        return Err(Box::new(io::Error::new(
-            ErrorKind::NotFound,
-            format!(
-                "Cannot delete! The file {} can be the original file. ",
-                file_path.as_ref().file_name().unwrap().to_str().unwrap()
-            ),
-        )));
-    }
-
-    match fs::remove_file(&file_path) {
-        Ok(_) => (),
-        Err(e) => return Err(Box::new(e)),
-    }
-
-    Ok(file_path)
-}
-
 /// Factor struct that used for setting quality and resize ratio in the new image.
 ///
-/// The [`Compressor`] and [`FolderCompressor`](super::FolderCompressor) need a function pointer that
-/// calculate and return the `Factor` for compressing images.
+/// The [`Compressor`] and [`FolderCompressor`](super::FolderCompressor) need `Factor` for compressing images.
 ///
 /// So, to create a new `Compressor` or `FolderCompressor` instance
-/// you need to define a new function or closure that calculates and returns a `Factor` instance
-/// based on the size of image(width and height) and file size.
+/// you need to define a new `Factor` instance contains the quality ratio of image and file size ratio to compress.
 ///
 /// The recommended range of quality is 60 to 80.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -135,34 +91,19 @@ impl Default for Factor {
 ///
 pub struct Compressor<O: AsRef<Path>, D: AsRef<Path>> {
     factor: Factor,
-    original_path: O,
-    destination_path: D,
-    delete_orininal: bool,
+    source_path: O,
+    dest_path: D,
+    delete_source: bool,
 }
 
 impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
-    /// Create a new compressor.
-    ///
-    /// The new `Compressor` instance needs a function to calculate quality and scaling factor of the new compressed image.
-    /// For more information of `cal_factor_func` parameter, please check the [`Factor`] struct.
-    ///
-    /// # Examples
-    /// ```
-    /// use std::path::PathBuf;
-    /// use image_compressor::compressor::Compressor;
-    /// use image_compressor::Factor;
-    ///
-    /// let origin_dir = PathBuf::from("origin").join("file1.jpg");
-    /// let dest_dir = PathBuf::from("dest");
-    ///
-    /// let compressor = Compressor::new(origin_dir, dest_dir, |width, height, file_size| {return Factor::new(75., 0.7)});
-    /// ```
-    pub fn new(origin_dir: O, dest_dir: D) -> Self {
+    /// Create a new `Compressor` instance.
+    pub fn new(source_dir: O, dest_dir: D) -> Self {
         Compressor {
             factor: Factor::default(),
-            original_path: origin_dir,
-            destination_path: dest_dir,
-            delete_orininal: false,
+            source_path: source_dir,
+            dest_path: dest_dir,
+            delete_source: false,
         }
     }
 
@@ -171,15 +112,17 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         self.factor = factor;
     }
 
-    /// Sets whether the program deletes the original file.
-    pub fn set_delete_origin(&mut self, to_delete: bool) {
-        self.delete_orininal = to_delete;
+    /// Sets whether the program deletes the source file.
+    pub fn set_delete_source(&mut self, to_delete: bool) {
+        self.delete_source = to_delete;
     }
 
+    /// Compress the image to jpg format.
+    /// The new image will be saved in the destination directory.
     fn convert_to_jpg(&self) -> Result<PathBuf, Box<dyn Error>> {
-        let img = image::open(&self.original_path)?;
-        let stem = self.original_path.as_ref().file_stem().unwrap();
-        let mut new_path = match self.original_path.as_ref().parent() {
+        let img = image::open(&self.source_path)?;
+        let stem = self.source_path.as_ref().file_stem().unwrap();
+        let mut new_path = match self.source_path.as_ref().parent() {
             Some(s) => s,
             None => {
                 return Err(Box::new(io::Error::new(
@@ -195,6 +138,9 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         Ok(new_path)
     }
 
+    /// Compress the image to jpg format.
+    /// The new image will be saved in the destination directory.
+    ///
     fn compress(
         &self,
         resized_img_data: Vec<u8>,
@@ -230,6 +176,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         Ok(compressed)
     }
 
+    /// Resize the image vector.
     fn resize(
         &self,
         path: &Path,
@@ -257,36 +204,24 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
     /// Compress a file.
     ///
     /// Compress the given image file and save it to target_dir.
-    /// If the extension of the given image file is not jpg or jpeg, then convert the image to jpg file.
-    /// If the module can not open the file, just copy it to target_dir.
+    /// If the extension of the given image file is not jpg or jpeg, convert the image to jpg file.
+    /// If the image module can not open the file, such as pdf, mp4, etc., just copy it to target_dir.
     /// Compress quality and resize ratio calculate based on file size of the image.
     /// For a continuous multithreading process, every single error doesn't occur panic or exception and just print error message with return Ok.
     ///
-    /// If the flag to delete the original is true, the function delete the original file.
+    /// If the flag to delete the source is true, the function delete the source file.
     ///
-    /// # Examples
-    /// ```
-    /// use std::path::PathBuf;
-    /// use image_compressor::compressor::Compressor;
-    /// use image_compressor::Factor;
-    ///
-    /// let origin_dir = PathBuf::from("origin").join("file1.jpg");
-    /// let dest_dir = PathBuf::from("dest");
-    ///
-    /// let compressor = Compressor::new(origin_dir, dest_dir, |width, height, file_size| {return Factor::new(75., 0.7)});
-    /// compressor.compress_to_jpg();
-    /// ```
     pub fn compress_to_jpg(&self) -> Result<PathBuf, Box<dyn Error>> {
-        let origin_file_path = self.original_path.as_ref();
-        let target_dir = self.destination_path.as_ref();
+        let source_file_path = self.source_path.as_ref();
+        let target_dir = self.dest_path.as_ref();
 
-        let file_name = match origin_file_path.file_name() {
+        let file_name = match source_file_path.file_name() {
             Some(e) => e.to_str().unwrap_or(""),
             None => "",
         };
 
-        let file_stem = origin_file_path.file_stem().unwrap();
-        let file_extension = match origin_file_path.extension() {
+        let file_stem = source_file_path.file_stem().unwrap();
+        let file_extension = match source_file_path.extension() {
             None => OsStr::new(""),
             Some(e) => e,
         };
@@ -308,22 +243,20 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         if file_extension.ne("jpg") && file_extension.ne("jpeg") {
             converted_file = match self.convert_to_jpg() {
-                Ok(p) => {
-                    Some(p)
-                }
+                Ok(p) => Some(p),
                 Err(e) => {
                     let m = format!(
                         "Cannot convert file {} to jpg. Just copy it. : {}",
                         file_name, e
                     );
-                    fs::copy(origin_file_path, target_dir.join(&file_name))?;
+                    fs::copy(source_file_path, target_dir.join(&file_name))?;
                     return Err(Box::new(io::Error::new(ErrorKind::InvalidData, m)));
                 }
             };
-        } 
+        }
 
         let (resized_img_data, target_width, target_height) =
-            self.resize(origin_file_path, self.factor.size_ratio())?;
+            self.resize(source_file_path, self.factor.size_ratio())?;
         let compressed_img_data = self.compress(
             resized_img_data,
             target_width,
@@ -336,14 +269,14 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         match converted_file {
             Some(c) => {
-                fs::remove_file(c)?; 
-            },
+                fs::remove_file(c)?;
+            }
             None => (),
         }
 
-        // Delete the original file when the flag is true.
-        match self.delete_orininal {
-            true => fs::remove_file(&self.original_path)?,
+        // Delete the source file when the flag is true.
+        match self.delete_source {
+            true => fs::remove_file(&self.source_path)?,
             false => (),
         }
 
@@ -356,12 +289,12 @@ mod tests {
 
     use super::*;
 
-    use image::{ImageBuffer, io::Reader, ImageFormat};
     use colorgrad;
+    use image::{io::Reader, ImageBuffer, ImageFormat};
     use rand::Rng;
     use std::path::{Path, PathBuf};
 
-    /// Create test directory and a image file in it. 
+    /// Create test directory and a image file in it.
     fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
         let test_dir = test_name.as_ref().to_path_buf();
         if test_dir.is_dir() {
@@ -389,8 +322,9 @@ mod tests {
         let rgb_path = test_dir.join("img_random_rgb.gif");
         img_random_rgb.save(&rgb_path).unwrap();
         let grad = colorgrad::CustomGradient::new()
-        .html_colors(&["deeppink", "gold", "seagreen"])
-        .build().unwrap();
+            .html_colors(&["deeppink", "gold", "seagreen"])
+            .build()
+            .unwrap();
         let mut img_jpg = ImageBuffer::new(WIDTH, HEIGHT);
         for (x, _, pixel) in img_jpg.enumerate_pixels_mut() {
             let rgba = grad.at(x as f64 / WIDTH as f64).to_rgba8();
@@ -413,12 +347,17 @@ mod tests {
         let (test_dir, test_images) = setup("convert_to_jpg_test_dir");
 
         for test_image in &test_images {
-            let compressor = Compressor::new(
-                test_image,
-                &test_dir,
+            let compressor = Compressor::new(test_image, &test_dir);
+            let result = compressor.convert_to_jpg().unwrap(); // Just convert, not compress.
+            assert_eq!(
+                Reader::open(result)
+                    .unwrap()
+                    .with_guessed_format()
+                    .unwrap()
+                    .format()
+                    .unwrap(),
+                ImageFormat::Jpeg
             );
-            let result = compressor.convert_to_jpg().unwrap(); // Just convert, not compress. 
-            assert_eq!(Reader::open(result).unwrap().with_guessed_format().unwrap().format().unwrap(), ImageFormat::Jpeg);
         }
         cleanup(test_dir);
     }
@@ -431,10 +370,7 @@ mod tests {
         let mut txt_file = File::create(&txt_path).unwrap();
         write!(txt_file, "{}", txt_data).unwrap();
 
-        let compressor = Compressor::new(
-            &txt_path,
-            &test_dir,
-        );
+        let compressor = Compressor::new(&txt_path, &test_dir);
         assert!(compressor.compress_to_jpg().is_err());
         assert!(txt_path.is_file());
         txt_path.set_extension("jpg");
@@ -450,19 +386,42 @@ mod tests {
         fs::create_dir_all(&dest_dir).unwrap();
 
         for test_image in &test_images {
-            let mut compressor = Compressor::new(
-                test_image,
-                &dest_dir,
-            );
-            compressor.set_delete_origin(true);
+            let mut compressor = Compressor::new(test_image, &dest_dir);
+            compressor.set_factor(Factor::new(0.5, 0.5));
+            compressor.compress_to_jpg().unwrap();
+        }
+        test_images = test_images
+            .iter()
+            .map(|image| dest_dir.join(image.file_name().unwrap()))
+            .collect();
+        for new_image in &test_images {
+            let mut new_test_image = new_image.clone();
+            new_test_image.set_extension("jpg");
+            assert!(new_test_image.is_file());
+        }
+        cleanup(test_dir);
+        cleanup(dest_dir);
+    }
+
+    #[test]
+    fn compress_to_jpg_with_delete_test() {
+        let (test_dir, mut test_images) = setup("compress_to_jpg_with_delete_test");
+
+        let dest_dir = PathBuf::from("compress_to_jpg_with_delete_dest_dir");
+        fs::create_dir_all(&dest_dir).unwrap();
+
+        for test_image in &test_images {
+            let mut compressor = Compressor::new(test_image, &dest_dir);
+            compressor.set_delete_source(true);
             compressor.compress_to_jpg().unwrap();
         }
         for test_image in &test_images {
             assert!(!test_image.is_file());
         }
-        test_images = test_images.iter().map(|image| {
-            dest_dir.join(image.file_name().unwrap())
-        }).collect();
+        test_images = test_images
+            .iter()
+            .map(|image| dest_dir.join(image.file_name().unwrap()))
+            .collect();
         for new_image in &test_images {
             let mut new_test_image = new_image.clone();
             new_test_image.set_extension("jpg");
