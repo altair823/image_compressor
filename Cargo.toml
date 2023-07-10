@@ -1,8 +1,8 @@
 [package]
 name = "image_compressor"
-authors = ["Kim tae hyeon <kimth0734@gmail.com>"]
+authors = ["Kim tae hyeon <dlsrks0734@gmail.com>"]
 description = "A image compressing module using mozjpeg, and image crates."
-version = "1.3.0"
+version = "1.3.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/altair823/image_compressor"
