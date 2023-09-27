@@ -2,14 +2,13 @@
 
 [![Crates.io](https://img.shields.io/crates/v/image_compressor.svg)](https://crates.io/crates/image_compressor)  [![Documentation](https://docs.rs/image/badge.svg)](https://docs.rs/image_compressor/)
 
-A library for resize and compress images to jpg.
+A library for resizing and compressing images to **jpg**.
 
 ## Features
 
 - Compress and resize a single image to jpg format. 
-- Compress and resize multiple images of certain directory. 
-- Compress and resize images with multithreading. 
-- Customize the quality and size of compressed images. 
+- Multithreading. 
+- Customize the quality and size ratio of compressed images. 
 - Send a completion message via `mpsc::Sender` (see [Using Message Passing to Transfer Data Between Threads](https://doc.rust-lang.org/book/ch16-02-message-passing.html) in rust tutorial).
 
 ## Supported Image Format
@@ -21,7 +20,7 @@ This crate uses image crate for opening image files.
 
 #### `FolderCompressor` and its `compress` function example.
 
-The function compress all images in given origin folder with multithread at the same time,
+The function compress all images in given source folder with multithread at the same time,
 and wait until everything is done. 
 If user set a `Sender` for `FolderCompressor`, the method sends messages whether compressing is complete. 
 
@@ -31,13 +30,13 @@ use std::sync::mpsc;
 use image_compressor::FolderCompressor;
 use image_compressor::Factor;
 
-let origin = PathBuf::from("origin_dir");   // original directory path
+let source = PathBuf::from("source_dir");   // source directory path
 let dest = PathBuf::from("dest_dir");       // destination directory path
 let thread_count = 4;                       // number of threads
 let (tx, tr) = mpsc::channel();             // Sender and Receiver. for more info, check mpsc and message passing. 
 
-let mut comp = FolderCompressor::new(origin, dest);
-comp.set_cal_func(|width, height, file_size| {return Factor::new(75., 0.7)});
+let mut comp = FolderCompressor::new(source, dest);
+comp.set_factor(Factor::new(80., 0.8));
 comp.set_thread_count(4);
 comp.set_sender(tx);
 
@@ -54,8 +53,10 @@ Compressing just a one image.
 use std::path::PathBuf;
 use image_compressor::compressor::Compressor;
 use image_compressor::Factor;
-let origin = PathBuf::from("origin").join("file1.jpg");
+
+let source = PathBuf::from("source").join("file1.jpg");
 let dest = PathBuf::from("dest");
-let comp = Compressor::new(origin_dir, dest_dir, |width, height, file_size| {return Factor::new(75., 0.7)});
+let comp = Compressor::new(source_dir, dest_dir);
+compressor.set_factor(Factor::new(80., 0.8));
 comp.compress_to_jpg();
 ```

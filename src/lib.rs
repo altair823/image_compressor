@@ -11,14 +11,14 @@
 //! To use these structs and its functions, you need to give them a function pointer or closure
 //! that calculate size and quality of new compressed images.
 //! That calculator function(or closure) need to calculate and returns a [`Factor`]
-//! base on image size and file size of the original image.
+//! base on image size and file size of the source image.
 //! To see more information about it, see [`Factor`].
 //!
 //! # Examples
 //!
 //! ### `FolderCompressor` and its `compress` function example.
 //!
-//! The function compress all images in given origin folder with multithread at the same time,
+//! The function compress all images in given source folder with multithread at the same time,
 //! and wait until everything is done.
 //! If user set a [`Sender`] for [`FolderCompressor`], the method sends messages whether compressing is complete.
 //! ```
@@ -27,13 +27,13 @@
 //! use image_compressor::FolderCompressor;
 //! use image_compressor::Factor;
 //!
-//! let origin = PathBuf::from("origin_dir");   // original directory path
+//! let source = PathBuf::from("source_dir");   // source directory path
 //! let dest = PathBuf::from("dest_dir");       // destination directory path
 //! let thread_count = 4;                       // number of threads
 //! let (tx, tr) = mpsc::channel();             // Sender and Receiver. for more info, check mpsc and message passing.
 //!
-//! let mut comp = FolderCompressor::new(origin, dest);
-//! comp.set_cal_func(|width, height, file_size| {return Factor::new(75., 0.7)});
+//! let mut comp = FolderCompressor::new(source, dest);
+//! comp.set_factor(Factor::new(80., 0.8));
 //! comp.set_thread_count(4);
 //! comp.set_sender(tx);
 //!
@@ -51,10 +51,11 @@
 //! use image_compressor::compressor::Compressor;
 //! use image_compressor::Factor;
 //!
-//! let origin_dir = PathBuf::from("origin").join("file1.jpg");
+//! let source_dir = PathBuf::from("source").join("file1.jpg");
 //! let dest_dir = PathBuf::from("dest");
 //!
-//! let comp = Compressor::new(origin_dir, dest_dir, |width, height, file_size| {return Factor::new(75., 0.7)});
+//! let mut comp = Compressor::new(source_dir, dest_dir);
+//! comp.set_factor(Factor::new(80., 0.8));
 //! comp.compress_to_jpg();
 //! ```
 
@@ -72,8 +73,8 @@ use std::thread;
 pub mod compressor;
 pub mod crawler;
 pub mod dir;
-pub use compressor::Factor;
 
+pub use compressor::Factor;
 
 fn try_send_message<T: ToString>(sender: &Option<Sender<T>>, message: T) {
     match sender {
@@ -92,16 +93,16 @@ fn send_message<T: ToString>(sender: &Sender<T>, message: T) {
 /// Compressor struct for a directory.
 pub struct FolderCompressor {
     factor: Factor,
-    original_path: PathBuf,
-    destination_path: PathBuf,
+    source_path: PathBuf,
+    dest_path: PathBuf,
     thread_count: u32,
-    delete_original: bool,
+    delete_source: bool,
     sender: Option<Sender<String>>,
 }
 
 impl FolderCompressor {
     /// Create a new `FolderCompressor` instance.
-    /// Just needs original directory path and destination directory path.
+    /// Just needs source directory path and destination directory path.
     /// If you do not set the quality calculation function,
     /// it will use the default calculation function which sets the quality only by the file size.
     /// Likewise, if you do not set the number of threads, only one thread is used by default.\
@@ -110,38 +111,34 @@ impl FolderCompressor {
     /// use image_compressor::FolderCompressor;
     /// use std::path::Path;
     ///
-    /// let origin = Path::new("origin");
+    /// let source = Path::new("source");
     /// let dest = Path::new("dest");
     ///
-    /// let comp = FolderCompressor::new(origin, dest);
+    /// let comp = FolderCompressor::new(source, dest);
     /// ```
-    pub fn new<O: AsRef<Path>, D: AsRef<Path>>(origin_path: O, dest_path: D) -> Self {
+    pub fn new<O: AsRef<Path>, D: AsRef<Path>>(source_path: O, dest_path: D) -> Self {
         FolderCompressor {
             factor: Factor::default(),
-            original_path: origin_path.as_ref().to_path_buf(),
-            destination_path: dest_path.as_ref().to_path_buf(),
+            source_path: source_path.as_ref().to_path_buf(),
+            dest_path: dest_path.as_ref().to_path_buf(),
             thread_count: 1,
-            delete_original: false,
+            delete_source: false,
             sender: None,
         }
     }
 
-    
-    #[deprecated(since = "1.3.0", note = "Use just `set_factor` method instead this.")]
-    pub fn set_cal_func(&mut self, cal_func: fn(u32, u32, u64) -> Factor) {
-        self.factor = cal_func(0, 0, 0);
-    }
-
-    /// Set the factor for the quality and scale of the image.
+    /// Set Factor using to compress images.
     pub fn set_factor(&mut self, factor: Factor) {
         self.factor = factor;
     }
 
-    /// Set whether to delete original files.
-    pub fn set_delelte_origin(&mut self, to_delete: bool) {
-        self.delete_original = to_delete;
+    /// Set whether to delete source files.
+    pub fn set_delete_source(&mut self, to_delete: bool) {
+        self.delete_source = to_delete;
     }
 
+    /// Set Sender for message passing.
+    /// If you set a sender, the method sends messages whether compressing is complete.
     pub fn set_sender(&mut self, sender: Sender<String>) {
         self.sender = Some(sender);
     }
@@ -153,10 +150,10 @@ impl FolderCompressor {
     /// use image_compressor::Factor;
     /// use std::path::Path;
     ///
-    /// let origin = Path::new("origin");
+    /// let source = Path::new("source");
     /// let dest = Path::new("dest");
     ///
-    /// let mut comp = FolderCompressor::new(origin, dest);
+    /// let mut comp = FolderCompressor::new(source, dest);
     /// comp.set_thread_count(4);
     /// ```
     pub fn set_thread_count(&mut self, thread_count: u32) {
@@ -165,7 +162,7 @@ impl FolderCompressor {
 
     /// Folder compress function.
     ///
-    /// The function compress all images in given origin folder with multithreading, and wait until everything is done.
+    /// The function compress all images in given source folder with multithreading, and wait until everything is done.
     /// If user set a [`Sender`] for [`FolderCompressor`] before, the method sends messages whether compressing is complete.
     ///
     /// # Warning
@@ -175,11 +172,11 @@ impl FolderCompressor {
     /// use std::sync::mpsc;
     /// use image_compressor::FolderCompressor;
     ///
-    /// let origin = PathBuf::from("origin_dir");
+    /// let source = PathBuf::from("source_dir");
     /// let dest = PathBuf::from("dest_dir");
     /// let (tx, tr) = mpsc::channel();
     ///
-    /// let mut comp = FolderCompressor::new(origin, dest);
+    /// let mut comp = FolderCompressor::new(source, dest);
     /// comp.set_sender(tx);
     /// comp.set_thread_count(4);
     ///
@@ -189,7 +186,7 @@ impl FolderCompressor {
     /// }
     /// ```
     pub fn compress(self) -> Result<(), Box<dyn Error>> {
-        let to_comp_file_list = get_file_list(&self.original_path)?;
+        let to_comp_file_list = get_file_list(&self.source_path)?;
         try_send_message(
             &self.sender,
             format!("Total file count: {}", to_comp_file_list.len()),
@@ -200,8 +197,8 @@ impl FolderCompressor {
             queue.push(i);
         }
         let mut handles = Vec::new();
-        let arc_root = Arc::new(self.original_path);
-        let arc_dest = Arc::new(self.destination_path);
+        let arc_root = Arc::new(self.source_path);
+        let arc_dest = Arc::new(self.dest_path);
         for _ in 0..self.thread_count {
             let arc_root = Arc::clone(&arc_root);
             let arc_dest = Arc::clone(&arc_dest);
@@ -215,7 +212,7 @@ impl FolderCompressor {
                             arc_queue,
                             &arc_root,
                             &arc_dest,
-                            self.delete_original,
+                            self.delete_source,
                             *arc_factor.clone(),
                             new_s,
                         );
@@ -226,7 +223,7 @@ impl FolderCompressor {
                         arc_queue,
                         &arc_root,
                         &arc_dest,
-                        self.delete_original,
+                        self.delete_source,
                         *arc_factor.clone(),
                     );
                 }),
@@ -240,67 +237,15 @@ impl FolderCompressor {
 
         try_send_message(&self.sender, "Compress complete!".to_string());
 
-        if self.delete_original {
+        if self.delete_source {
             match delete_recursive(&*arc_root) {
                 Ok(_) => try_send_message(
                     &self.sender,
-                    "Delete original directories complete!".to_string(),
+                    "Delete source directories complete!".to_string(),
                 ),
                 Err(e) => try_send_message(
                     &self.sender,
-                    format!("Cannot delete original directories! {}", e),
-                ),
-            };
-        }
-        Ok(())
-    }
-
-    #[deprecated(since = "1.2.0", note = "Use just `compress` method instead this.")]
-    pub fn compress_with_sender(self, sender: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
-        let to_comp_file_list = get_file_list(&self.original_path)?;
-        send_message(
-            &sender,
-            format!("Total file count: {}", to_comp_file_list.len()),
-        );
-
-        let queue = Arc::new(SegQueue::new());
-        for i in to_comp_file_list {
-            queue.push(i);
-        }
-        let mut handles = Vec::new();
-        let arc_root = Arc::new(self.original_path);
-        let arc_dest = Arc::new(self.destination_path);
-        for _ in 0..self.thread_count {
-            let new_sender = sender.clone();
-            let arc_root = Arc::clone(&arc_root);
-            let arc_dest = Arc::clone(&arc_dest);
-            let arc_queue = Arc::clone(&queue);
-            let arc_factor = Arc::new(self.factor);
-            let handle = thread::spawn(move || {
-                process_with_sender(
-                    arc_queue,
-                    &arc_root,
-                    &arc_dest,
-                    self.delete_original,
-                    *arc_factor.clone(),
-                    new_sender,
-                );
-            });
-            handles.push(handle);
-        }
-
-        for h in handles {
-            h.join().unwrap();
-        }
-
-        send_message(&sender, "Compress complete!".to_string());
-
-        if self.delete_original {
-            match delete_recursive(&*arc_root) {
-                Ok(_) => send_message(&sender, "Delete original directories complete!".to_string()),
-                Err(e) => send_message(
-                    &sender,
-                    format!("Cannot delete original directories! {}", e),
+                    format!("Cannot delete source directories! {}", e),
                 ),
             };
         }
@@ -308,11 +253,13 @@ impl FolderCompressor {
     }
 }
 
+/// Process function for multithread compressing.
+/// This function is used when user doesn't set a [`Sender`] for [`FolderCompressor`].
 fn process(
     queue: Arc<SegQueue<PathBuf>>,
     root: &Path,
     dest: &Path,
-    to_delete_original: bool,
+    to_delete_source: bool,
     factor: Factor,
 ) {
     while !queue.is_empty() {
@@ -351,7 +298,7 @@ fn process(
                 }
                 let mut compressor = Compressor::new(&file, new_dest_dir);
                 compressor.set_factor(factor);
-                compressor.set_delete_origin(to_delete_original);
+                compressor.set_delete_source(to_delete_source);
                 match compressor.compress_to_jpg() {
                     Ok(_) => {
                         println!("Compress complete! File: {}", file_name);
@@ -365,11 +312,14 @@ fn process(
     }
 }
 
+/// Process function for multithread compressing.
+/// This function is used when user sets a [`Sender`] for [`FolderCompressor`].
+/// This function sends messages to the [`Sender`] when compressing is complete.
 fn process_with_sender(
     queue: Arc<SegQueue<PathBuf>>,
     root: &Path,
     dest: &Path,
-    to_delete_original: bool,
+    to_delete_source: bool,
     factor: Factor,
     sender: mpsc::Sender<String>,
 ) {
@@ -409,7 +359,7 @@ fn process_with_sender(
                 }
                 let mut compressor = Compressor::new(&file, new_dest_dir);
                 compressor.set_factor(factor);
-                compressor.set_delete_origin(to_delete_original);
+                compressor.set_delete_source(to_delete_source);
                 match compressor.compress_to_jpg() {
                     Ok(p) => send_message(
                         &sender,
@@ -428,52 +378,77 @@ fn process_with_sender(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fs_extra::dir;
-    use fs_extra::dir::CopyOptions;
+    use image::ImageBuffer;
+    use rand::Rng;
     use std::fs;
 
-    fn setup(test_num: i32) -> (i32, PathBuf, PathBuf) {
-        let test_origin_dir = PathBuf::from(&format!("{}{}", "test_origin", test_num));
-        if test_origin_dir.is_dir() {
-            fs::remove_dir_all(&test_origin_dir).unwrap();
+    /// Create test directory and a image file in it.
+    fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
+        let test_dir = test_name.as_ref().to_path_buf();
+        if test_dir.is_dir() {
+            fs::remove_dir_all(&test_dir).unwrap();
         }
-        fs::create_dir(&test_origin_dir.as_path()).unwrap();
+        fs::create_dir_all(&test_dir).unwrap();
 
-        let test_dest_dir = PathBuf::from(&format!("{}{}", "test_dest", test_num));
-        if test_dest_dir.is_dir() {
-            fs::remove_dir_all(&test_dest_dir).unwrap();
+        const WIDTH: u32 = 256;
+        const HEIGHT: u32 = 256;
+        let img_stripe = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, _| {
+            if x % 2 == 0 {
+                image::Luma([0u8])
+            } else {
+                image::Luma([255u8])
+            }
+        });
+        let stripe_path = test_dir.join("img_stripe.png");
+        img_stripe.save(&stripe_path).unwrap();
+        let img_random_rgb = ImageBuffer::from_fn(WIDTH, HEIGHT, |_, _| {
+            let r = rand::thread_rng().gen_range(0..256) as u8;
+            let g = rand::thread_rng().gen_range(0..256) as u8;
+            let b = rand::thread_rng().gen_range(0..256) as u8;
+            image::Rgb([r, g, b])
+        });
+        let rgb_path = test_dir.join("img_random_rgb.gif");
+        img_random_rgb.save(&rgb_path).unwrap();
+        let grad = colorgrad::CustomGradient::new()
+            .html_colors(&["deeppink", "gold", "seagreen"])
+            .build()
+            .unwrap();
+        let mut img_jpg = ImageBuffer::new(WIDTH, HEIGHT);
+        for (x, _, pixel) in img_jpg.enumerate_pixels_mut() {
+            let rgba = grad.at(x as f64 / WIDTH as f64).to_rgba8();
+            *pixel = image::Rgba(rgba);
         }
-        fs::create_dir(&test_dest_dir.as_path()).unwrap();
-
-        let options = CopyOptions::new();
-        dir::copy("original_images", &test_origin_dir, &options).unwrap();
-
-        (test_num, test_origin_dir, test_dest_dir)
+        let jpg_path = test_dir.join("img_jpg.jpg");
+        img_jpg.save(&jpg_path).unwrap();
+        (test_dir, vec![stripe_path, rgb_path, jpg_path])
     }
 
-    fn cleanup(test_num: i32) {
-        let test_origin_dir = PathBuf::from(&format!("{}{}", "test_origin", test_num));
-        if test_origin_dir.is_dir() {
-            fs::remove_dir_all(&test_origin_dir).unwrap();
-        }
-        let test_dest_dir = PathBuf::from(&format!("{}{}", "test_dest", test_num));
-        if test_dest_dir.is_dir() {
-            fs::remove_dir_all(&test_dest_dir).unwrap();
+    fn cleanup<T: AsRef<Path>>(test_dir: T) {
+        if test_dir.as_ref().is_dir() {
+            fs::remove_dir_all(&test_dir).unwrap();
         }
     }
 
     #[test]
     fn folder_compress_test() {
-        let (_, test_origin_dir, test_dest_dir) = setup(4);
-        let mut folder_compressor = FolderCompressor::new(&test_origin_dir, &test_dest_dir);
+        let (test_source_dir, _) = setup("folder_compress_test_source");
+        let test_dest_dir = PathBuf::from("folder_compress_test_dest");
+        if test_dest_dir.is_dir() {
+            fs::remove_dir_all(&test_dest_dir).unwrap();
+        }
+        fs::create_dir_all(&test_dest_dir).unwrap();
+
+        let mut folder_compressor = FolderCompressor::new(&test_source_dir, &test_dest_dir);
         folder_compressor.set_thread_count(4);
         folder_compressor.compress().unwrap();
-        let a = get_file_list(test_origin_dir).unwrap();
-        let b = get_file_list(test_dest_dir).unwrap();
-        let origin_file_list = a.iter().map(|i| i.file_stem().unwrap()).collect::<Vec<_>>();
-        let dest_file_list = b.iter().map(|i| i.file_stem().unwrap()).collect::<Vec<_>>();
-        assert_eq!(origin_file_list, dest_file_list);
-        cleanup(4);
+        let a = get_file_list(&test_source_dir).unwrap();
+        let b = get_file_list(&test_dest_dir).unwrap();
+        let mut source_file_list = a.iter().map(|i| i.file_stem().unwrap()).collect::<Vec<_>>();
+        let mut dest_file_list = b.iter().map(|i| i.file_stem().unwrap()).collect::<Vec<_>>();
+        source_file_list.sort();
+        dest_file_list.sort();
+        assert_eq!(source_file_list, dest_file_list);
+        cleanup(test_source_dir);
+        cleanup(test_dest_dir);
     }
-
 }

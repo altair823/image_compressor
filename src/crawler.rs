@@ -5,10 +5,9 @@
 //! `get_file_list` example.
 //! ```
 //! use std::path::PathBuf;
-//! use image_compressor::crawler::{get_file_list, get_dir_list};
+//! use image_compressor::crawler::get_file_list;
 //! let root = PathBuf::from("root");
 //! get_file_list(&root);
-//! get_dir_list(&root);
 //! ```
 
 use std::io;
@@ -49,106 +48,78 @@ pub fn get_file_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
     Ok(image_list)
 }
 
-/// Get all directories list in the rood directory. Not recursive.
-pub fn get_dir_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
-    let cur_list: Vec<PathBuf> = root
-        .as_ref()
-        .read_dir()?
-        .map(|entry| entry.unwrap().path())
-        .collect();
-    let dir_list = cur_list
-        .iter()
-        .filter(|p| p.is_dir())
-        .map(|p| p.to_path_buf())
-        .collect::<Vec<_>>();
-
-    Ok(dir_list)
-}
-
 #[cfg(test)]
-mod tests {
+pub mod tests {
 
     use super::*;
+    use std::fs::File;
+    use std::io::Write;
     use std::path::{Path, PathBuf};
     use std::{fs, io};
 
-    struct DirData {
-        origin: PathBuf,
-        dest: PathBuf,
-    }
+    const CRAWLER_TEST_FILES: &'static [&str] = &[
+        "file1.txt",
+        "file2.txt",
+        "file3.txt",
+        "file4.txt",
+        "file5.txt",
+    ];
 
-    fn make_dir_data() -> DirData {
-        DirData {
-            origin: PathBuf::from("original_images"),
-            dest: PathBuf::from("test_original_images"),
+    /// Create dummy test files.
+    fn write_test_file<T: AsRef<Path>>(path: T) -> io::Result<()> {
+        match &path.as_ref().parent() {
+            Some(p) => fs::create_dir_all(&p).unwrap(),
+            None => (),
         }
-    }
-
-    fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
-        fs::create_dir_all(&dst)?;
-        for entry in fs::read_dir(src)? {
-            let entry = entry?;
-            let ty = entry.file_type()?;
-            if ty.is_dir() {
-                copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-            } else {
-                fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-            }
-        }
+        write!(
+            File::create(&path)?,
+            "{}",
+            "Hello world for ".to_owned() + path.as_ref().to_str().unwrap()
+        )?;
         Ok(())
     }
 
-    fn copy_origin_for_test() {
-        let DirData { origin, dest } = make_dir_data();
-        if dest.is_dir() {
-            fs::remove_dir_all(dest.as_path()).expect("cannot clear the test original directory!");
+    /// Setup the test and return a tuple of root directory and file name vector.
+    pub fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
+        let dir_data = test_name.as_ref().to_path_buf();
+        let files = vec![
+            dir_data.join(CRAWLER_TEST_FILES[0]),
+            dir_data.join("dir1").join(CRAWLER_TEST_FILES[1]),
+            dir_data
+                .join("dir1")
+                .join("dir2")
+                .join(CRAWLER_TEST_FILES[2]),
+            dir_data
+                .join("dir1")
+                .join("dir2")
+                .join("dir3")
+                .join(CRAWLER_TEST_FILES[3]),
+            dir_data
+                .join("dir1")
+                .join("dir2")
+                .join("dir3")
+                .join("dir4")
+                .join(CRAWLER_TEST_FILES[4]),
+        ];
+        for file in &files {
+            write_test_file(file).unwrap();
         }
-        copy_dir_all(origin.as_path(), dest.as_path())
-            .expect("cannot copy the original directory!");
+        (dir_data, files)
     }
 
-    fn remove_all_test_dir() {
-        let DirData { origin: _, dest } = make_dir_data();
-        if dest.is_dir() {
-            fs::remove_dir_all(dest.as_path()).expect("cannot clear the test original directory!");
+    fn cleanup<T: AsRef<Path>>(test_dir: T) {
+        if test_dir.as_ref().is_dir() {
+            fs::remove_dir_all(&test_dir).unwrap();
         }
-        if dest.is_dir() {
-            fs::remove_dir_all(dest.as_path())
-                .expect("cannot clear the test destination directory!");
-        }
-    }
-
-    /// Setup the test.
-    fn setup() {
-        let DirData { origin, dest: _ } = make_dir_data();
-        assert!(origin.exists());
-        assert!(!origin.is_file());
-        remove_all_test_dir();
-        copy_origin_for_test();
-    }
-
-    /// Clean up all tested data.
-    fn cleanup() {
-        remove_all_test_dir();
     }
 
     #[test]
-    fn get_image_list_test() {
-        setup();
-        let mut test_vec = get_file_list(PathBuf::from("test_original_images").as_path()).unwrap();
-        let mut expect_vec = vec![
-            PathBuf::from("test_original_images/file2.jpg"),
-            PathBuf::from("test_original_images/file1.png"),
-            PathBuf::from("test_original_images/dir1/file3.png"),
-            PathBuf::from("test_original_images/file4.jpg"),
-            PathBuf::from("test_original_images/dir1/file5.webp"),
-            PathBuf::from("test_original_images/dir1/dir2/file6.webp"),
-            PathBuf::from("test_original_images/file7.txt"),
-        ];
-
+    fn get_file_list_test() {
+        let (test_dir, mut expected_vec) = setup("get_file_list_test_dir");
+        let mut test_vec = get_file_list(&test_dir).unwrap();
         test_vec.sort();
-        expect_vec.sort();
-        assert_eq!(test_vec, expect_vec);
-        cleanup();
+        expected_vec.sort();
+        assert_eq!(test_vec, expected_vec);
+        cleanup(test_dir);
     }
 }
