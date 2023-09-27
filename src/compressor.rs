@@ -154,9 +154,8 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         comp.set_size(target_width, target_height);
 
-        comp.set_mem_dest();
         comp.set_optimize_scans(true);
-        comp.start_compress();
+        let mut comp = comp.start_compress(Vec::new())?;
 
         let mut line = 0;
         loop {
@@ -165,14 +164,12 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             }
             comp.write_scanlines(
                 &resized_img_data[line * target_width * 3..(line + 1) * target_width * 3],
-            );
+            )?;
             line += 1;
         }
-        comp.finish_compress();
+        
 
-        let compressed = comp
-            .data_to_vec()
-            .map_err(|_| "data_to_vec failed".to_string())?;
+        let compressed = comp.finish()?;
         Ok(compressed)
     }
 
