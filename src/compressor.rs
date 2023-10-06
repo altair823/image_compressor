@@ -40,9 +40,55 @@ pub struct Factor {
     /// Values range from 0 to 100 in float.
     quality: f32,
 
-    /// Ratio for resize the new compressed image.
-    /// Values range from 0 to 1 in float.
-    size_ratio: f32,
+    /// Resize Type of the new compressed image.
+    resize: ResizeType,
+}
+
+/// Resize Type enum.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum ResizeType {
+    /// Resize the image by a certain percentage.
+    /// The value range from 0 to 1 in float.
+    Ratio(f32),
+
+    /// Reduces the longest side size to the specified pixel
+    /// or does not scale if the longest side is less than that pixel.
+    LongestSidePixels(usize),
+
+    /// Reduces the shortest side size to the specified pixel
+    /// or does not scale if the shortest side is less than that pixel.
+    ShortestSidePixels(usize),
+
+    /// Reduces the width to the specified pixels while maintaining a fixed ratio.
+    /// or does not scale if the width is less than that pixel.
+    WidthPixels(usize),
+
+    /// Reduces the height to the specified pixels while maintaining a fixed ratio.
+    /// or does not scale if the height is less than that pixel.
+    HeightPixels(usize),
+}
+
+impl ResizeType {
+    pub fn get_ratio(&self, width: usize, height: usize) -> f32 {
+        let ratio = match self {
+            ResizeType::Ratio(ratio) => *ratio,
+            ResizeType::LongestSidePixels(max_side_pixels) => {
+                *max_side_pixels as f32 / width.max(height) as f32
+            }
+            ResizeType::ShortestSidePixels(min_side_pixels) => {
+                *min_side_pixels as f32 / width.min(height) as f32
+            }
+            ResizeType::WidthPixels(width_pixels) => *width_pixels as f32 / width as f32,
+            ResizeType::HeightPixels(height_pixels) => *height_pixels as f32 / height as f32,
+        };
+        if ratio > 1. {
+            1.
+        } else if ratio < 0. {
+            0.
+        } else {
+            ratio
+        }
+    }
 }
 
 impl Factor {
@@ -60,7 +106,25 @@ impl Factor {
         if (quality > 0. && quality <= 100.) && (size_ratio > 0. && size_ratio <= 1.) {
             Self {
                 quality,
-                size_ratio,
+                resize: ResizeType::Ratio(size_ratio),
+            }
+        } else {
+            panic!("Wrong Factor argument!");
+        }
+    }
+
+    /// Create a new `Factor` instance with `ResizeType`.
+    /// The `quality` range from 0 to 100 in float.
+    /// The `resize_type` is [`ResizeType`](ResizeType) enum.
+    ///
+    /// # Panics
+    /// - If the quality value is 0 or less.
+    /// - If the quality value exceeds 100.
+    pub fn new_with_resize_type(quality: f32, resize_type: ResizeType) -> Self {
+        if quality > 0. && quality <= 100. {
+            Self {
+                quality,
+                resize: resize_type,
             }
         } else {
             panic!("Wrong Factor argument!");
@@ -72,9 +136,18 @@ impl Factor {
         self.quality
     }
 
+    /// Getter for `resize_type` of `Factor`.
+    pub fn resize_type(&self) -> ResizeType {
+        self.resize
+    }
+
+    #[deprecated(since = "1.5.0", note = "Please use `resize_type` instead.")]
     /// Getter for `size_ratio` of `Factor`.
     pub fn size_ratio(&self) -> f32 {
-        self.size_ratio
+        match self.resize {
+            ResizeType::Ratio(ratio) => ratio,
+            _ => panic!("Wrong resize type!"),
+        }
     }
 }
 
@@ -82,7 +155,7 @@ impl Default for Factor {
     fn default() -> Self {
         Self {
             quality: 80.,
-            size_ratio: 0.8,
+            resize: ResizeType::Ratio(0.8),
         }
     }
 }
@@ -181,11 +254,13 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
     fn resize(
         &self,
         path: &Path,
-        resize_ratio: f32,
+        resize_type: ResizeType,
     ) -> Result<(DynamicImage, usize, usize), Box<dyn Error>> {
         let img = image::open(path).map_err(|e| e.to_string())?;
         let width = img.width() as usize;
         let height = img.height() as usize;
+
+        let resize_ratio = resize_type.get_ratio(width, height);
 
         let width = width as f32 * resize_ratio;
         let height = height as f32 * resize_ratio;
@@ -230,7 +305,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         }
 
         let (resized_img, target_width, target_height) =
-            self.resize(source_file_path, self.factor.size_ratio())?;
+            self.resize(source_file_path, self.factor.resize_type())?;
 
         let resized_img_data = match resized_img.color() {
             image::ColorType::Rgb8 => resized_img.into_rgb8().to_vec(),
