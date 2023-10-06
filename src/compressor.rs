@@ -20,7 +20,6 @@
 use image::imageops::FilterType;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{BufWriter, ErrorKind, Write};
 use std::path::{Path, PathBuf};
@@ -126,27 +125,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
     /// Compress the image to jpg format.
     /// The new image will be saved in the destination directory.
-    fn convert_to_jpg(&self) -> Result<PathBuf, Box<dyn Error>> {
-        let img = image::open(&self.source_path)?;
-        let stem = self.source_path.as_ref().file_stem().unwrap();
-        let mut new_path = match self.source_path.as_ref().parent() {
-            Some(s) => s,
-            None => {
-                return Err(Box::new(io::Error::new(
-                    io::ErrorKind::BrokenPipe,
-                    "Cannot get parent directory!",
-                )))
-            }
-        }
-        .join(stem);
-        new_path.set_extension("jpg");
-        img.save(&new_path)?;
-
-        Ok(new_path)
-    }
-
-    /// Compress the image to jpg format.
-    /// The new image will be saved in the destination directory.
     ///
     fn compress(
         &self,
@@ -179,6 +157,25 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         Ok(compressed)
     }
 
+    /// Convert RGBA8 to RGB8.
+    /// If the alpha channel is 0, the function convert the pixel to white.
+    /// Otherwise, the function just remove the alpha channel.
+    fn rgba8_to_rgb8(rgba_data: &[u8]) -> Vec<u8> {
+        let mut rgb_data = Vec::with_capacity((rgba_data.len() / 4) * 3);
+        for i in (0..rgba_data.len()).step_by(4) {
+            if rgba_data[i + 3] == 0 {
+                rgb_data.push(255); // R
+                rgb_data.push(255); // G
+                rgb_data.push(255); // B
+            } else {
+                rgb_data.push(rgba_data[i]); // R
+                rgb_data.push(rgba_data[i + 1]); // G
+                rgb_data.push(rgba_data[i + 2]); // B
+            }
+        }
+        rgb_data
+    }
+
     /// Resize the image vector.
     fn resize(
         &self,
@@ -197,11 +194,13 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let resized_width = resized_img.width() as usize;
         let resized_height = resized_img.height() as usize;
 
-        Ok((
-            resized_img.into_rgb8().into_vec(),
-            resized_width,
-            resized_height,
-        ))
+        // Map to RGB8
+        let resized_img = match resized_img.color() {
+            image::ColorType::Rgb8 => resized_img.into_rgb8().to_vec(),
+            _ => Self::rgba8_to_rgb8(resized_img.to_rgba8().as_raw()),
+        };
+
+        Ok((resized_img, resized_width, resized_height))
     }
 
     /// Compress a file.
@@ -218,16 +217,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let source_file_path = self.source_path.as_ref();
         let target_dir = self.dest_path.as_ref();
 
-        let file_name = match source_file_path.file_name() {
-            Some(e) => e.to_str().unwrap_or(""),
-            None => "",
-        };
-
         let file_stem = source_file_path.file_stem().unwrap();
-        let file_extension = match source_file_path.extension() {
-            None => OsStr::new(""),
-            Some(e) => e,
-        };
 
         let mut target_file_name = PathBuf::from(file_stem);
         target_file_name.set_extension("jpg");
@@ -244,22 +234,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             )));
         }
 
-        let mut converted_file: Option<PathBuf> = None;
-
-        if file_extension.ne("jpg") && file_extension.ne("jpeg") {
-            converted_file = match self.convert_to_jpg() {
-                Ok(p) => Some(p),
-                Err(e) => {
-                    let m = format!(
-                        "Cannot convert file {} to jpg. Just copy it. : {}",
-                        file_name, e
-                    );
-                    fs::copy(source_file_path, target_dir.join(file_name))?;
-                    return Err(Box::new(io::Error::new(ErrorKind::InvalidData, m)));
-                }
-            };
-        }
-
         let (resized_img_data, target_width, target_height) =
             self.resize(source_file_path, self.factor.size_ratio())?;
         let compressed_img_data = self.compress(
@@ -271,10 +245,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         let mut file = BufWriter::new(File::create(&target_file)?);
         file.write_all(&compressed_img_data)?;
-
-        if let Some(c) = converted_file {
-            fs::remove_file(c)?;
-        }
 
         // Delete the source file when the flag is true.
         match self.delete_source {
@@ -296,7 +266,7 @@ mod tests {
     use super::*;
 
     use colorgrad;
-    use image::{io::Reader, ImageBuffer, ImageFormat};
+    use image::ImageBuffer;
     use rand::Rng;
     use std::path::{Path, PathBuf};
 
@@ -346,26 +316,6 @@ mod tests {
         if test_dir.as_ref().is_dir() {
             fs::remove_dir_all(&test_dir).unwrap();
         }
-    }
-
-    #[test]
-    fn convert_to_jpg_test() {
-        let (test_dir, test_images) = setup("convert_to_jpg_test_dir");
-
-        for test_image in &test_images {
-            let compressor = Compressor::new(test_image, &test_dir);
-            let result = compressor.convert_to_jpg().unwrap(); // Just convert, not compress.
-            assert_eq!(
-                Reader::open(result)
-                    .unwrap()
-                    .with_guessed_format()
-                    .unwrap()
-                    .format()
-                    .unwrap(),
-                ImageFormat::Jpeg
-            );
-        }
-        cleanup(test_dir);
     }
 
     #[test]
