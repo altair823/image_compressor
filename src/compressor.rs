@@ -94,6 +94,7 @@ pub struct Compressor<O: AsRef<Path>, D: AsRef<Path>> {
     source_path: O,
     dest_path: D,
     delete_source: bool,
+    overwrite_dest: bool,
 }
 
 impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
@@ -104,6 +105,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             source_path: source_dir,
             dest_path: dest_dir,
             delete_source: false,
+            overwrite_dest: false,
         }
     }
 
@@ -115,6 +117,11 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
     /// Sets whether the program deletes the source file.
     pub fn set_delete_source(&mut self, to_delete: bool) {
         self.delete_source = to_delete;
+    }
+
+    /// Sets whether the program overwrites the destination file.
+    pub fn set_overwrite_dest(&mut self, to_overwrite: bool) {
+        self.overwrite_dest = to_overwrite;
     }
 
     /// Compress the image to jpg format.
@@ -225,7 +232,9 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let mut target_file_name = PathBuf::from(file_stem);
         target_file_name.set_extension("jpg");
         let target_file = target_dir.join(&target_file_name);
-        if target_file.is_file() {
+
+        // If the target file is already existed and the flag to overwrite is false, return error.
+        if target_file.is_file() && !self.overwrite_dest {
             return Err(Box::new(io::Error::new(
                 ErrorKind::AlreadyExists,
                 format!(
@@ -269,7 +278,11 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         // Delete the source file when the flag is true.
         match self.delete_source {
-            true => fs::remove_file(&self.source_path)?,
+            true => {
+                if self.source_path.as_ref() != target_file {
+                    fs::remove_file(&self.source_path)?
+                }
+            }
             false => (),
         }
 
