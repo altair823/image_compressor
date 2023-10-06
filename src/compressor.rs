@@ -18,6 +18,7 @@
 //! ```
 
 use image::imageops::FilterType;
+use image::DynamicImage;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 use std::error::Error;
 use std::fs::File;
@@ -181,7 +182,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         &self,
         path: &Path,
         resize_ratio: f32,
-    ) -> Result<(Vec<u8>, usize, usize), Box<dyn Error>> {
+    ) -> Result<(DynamicImage, usize, usize), Box<dyn Error>> {
         let img = image::open(path).map_err(|e| e.to_string())?;
         let width = img.width() as usize;
         let height = img.height() as usize;
@@ -193,12 +194,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         let resized_width = resized_img.width() as usize;
         let resized_height = resized_img.height() as usize;
-
-        // Map to RGB8
-        let resized_img = match resized_img.color() {
-            image::ColorType::Rgb8 => resized_img.into_rgb8().to_vec(),
-            _ => Self::rgba8_to_rgb8(resized_img.to_rgba8().as_raw()),
-        };
 
         Ok((resized_img, resized_width, resized_height))
     }
@@ -234,8 +229,14 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             )));
         }
 
-        let (resized_img_data, target_width, target_height) =
+        let (resized_img, target_width, target_height) =
             self.resize(source_file_path, self.factor.size_ratio())?;
+
+        let resized_img_data = match resized_img.color() {
+            image::ColorType::Rgb8 => resized_img.into_rgb8().to_vec(),
+            _ => Self::rgba8_to_rgb8(resized_img.to_rgba8().as_raw()),
+        };
+
         let compressed_img_data = self.compress(
             resized_img_data,
             target_width,
