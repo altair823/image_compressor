@@ -57,7 +57,7 @@ pub mod tests {
     use std::path::{Path, PathBuf};
     use std::{fs, io};
 
-    const CRAWLER_TEST_FILES: &'static [&str] = &[
+    const CRAWLER_TEST_FILES: &[&str] = &[
         "file1.txt",
         "file2.txt",
         "file3.txt",
@@ -68,7 +68,7 @@ pub mod tests {
     /// Create dummy test files.
     fn write_test_file<T: AsRef<Path>>(path: T) -> io::Result<()> {
         match &path.as_ref().parent() {
-            Some(p) => fs::create_dir_all(&p).unwrap(),
+            Some(p) => fs::create_dir_all(p).unwrap(),
             None => (),
         }
         write!(

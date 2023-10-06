@@ -167,7 +167,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             )?;
             line += 1;
         }
-        
 
         let compressed = comp.finish()?;
         Ok(compressed)
@@ -246,7 +245,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
                         "Cannot convert file {} to jpg. Just copy it. : {}",
                         file_name, e
                     );
-                    fs::copy(source_file_path, target_dir.join(&file_name))?;
+                    fs::copy(source_file_path, target_dir.join(file_name))?;
                     return Err(Box::new(io::Error::new(ErrorKind::InvalidData, m)));
                 }
             };
@@ -264,11 +263,8 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let mut file = BufWriter::new(File::create(&target_file)?);
         file.write_all(&compressed_img_data)?;
 
-        match converted_file {
-            Some(c) => {
-                fs::remove_file(c)?;
-            }
-            None => (),
+        if let Some(c) = converted_file {
+            fs::remove_file(c)?;
         }
 
         // Delete the source file when the flag is true.

@@ -13,7 +13,7 @@ use std::path::Path;
 /// # Error
 /// - When directory is not empty.
 /// - When the child directory is not empty.
-/// 
+///
 pub fn delete_recursive<O: AsRef<Path>>(dir: O) -> Result<(), Box<dyn Error>> {
     if dir.as_ref().is_dir() {
         let mut is_file_exist = false;
@@ -54,7 +54,7 @@ mod tests {
     use std::io::Write;
     use std::path::PathBuf;
 
-    const TEST_FILES: &'static [&str] = &[
+    const TEST_FILES: &[&str] = &[
         "file1.txt",
         "file2.txt",
         "file3.txt",
@@ -90,7 +90,7 @@ mod tests {
     /// Create dummy test files.
     fn write_test_file<T: AsRef<Path>>(path: T) -> io::Result<()> {
         match &path.as_ref().parent() {
-            Some(p) => fs::create_dir_all(&p).unwrap(),
+            Some(p) => fs::create_dir_all(p).unwrap(),
             None => (),
         }
         write!(
