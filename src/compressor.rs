@@ -264,17 +264,14 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let mut file = BufWriter::new(File::create(&target_file)?);
         file.write_all(&compressed_img_data)?;
 
+        // Delete the source file when the flag is true.
         match converted_file {
-            Some(c) => {
-                fs::remove_file(c)?;
+            Some(_) => {
+                if self.delete_source {
+                    fs::remove_file(&self.source_path)?;
+                }
             }
             None => (),
-        }
-
-        // Delete the source file when the flag is true.
-        match self.delete_source {
-            true => fs::remove_file(&self.source_path)?,
-            false => (),
         }
 
         Ok(target_file)
