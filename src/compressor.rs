@@ -122,16 +122,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
     fn convert_to_jpg(&self) -> Result<PathBuf, Box<dyn Error>> {
         let img = image::open(&self.source_path)?;
         let stem = self.source_path.as_ref().file_stem().unwrap();
-        let mut new_path = match self.source_path.as_ref().parent() {
-            Some(s) => s,
-            None => {
-                return Err(Box::new(io::Error::new(
-                    io::ErrorKind::BrokenPipe,
-                    "Cannot get parent directory!",
-                )))
-            }
-        }
-        .join(stem);
+        let mut new_path = self.dest_path.as_ref().join(stem);
         new_path.set_extension("jpg");
         img.save(&new_path)?;
 
