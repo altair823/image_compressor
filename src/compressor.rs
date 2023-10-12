@@ -167,7 +167,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             )?;
             line += 1;
         }
-        
 
         let compressed = comp.finish()?;
         Ok(compressed)
