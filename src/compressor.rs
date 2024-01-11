@@ -20,7 +20,6 @@
 use image::imageops::FilterType;
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{BufWriter, ErrorKind, Write};
 use std::path::{Path, PathBuf};
@@ -301,7 +300,7 @@ mod tests {
 
     fn cleanup<T: AsRef<Path>>(test_dir: T) {
         if test_dir.as_ref().is_dir() {
-            // fs::remove_dir_all(&test_dir).unwrap();
+            fs::remove_dir_all(&test_dir).unwrap();
         }
     }
 
