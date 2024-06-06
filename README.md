@@ -20,7 +20,7 @@ This crate uses image crate for opening image files.
 
 #### `FolderCompressor` and its `compress` function example.
 
-The function compress all images, multithreaded, in a given source folder and waits until everything is done. 
+The function will compress all images, using multithreading, in a given source folder and will wait until everything is done. 
 If user set a `Sender` for `FolderCompressor`, the method sends messages whether compressing is complete. 
 
 ```rust
