@@ -79,7 +79,7 @@ pub mod tests {
         Ok(())
     }
 
-    /// Setup the test and return a tuple of root directory and file name vector.
+    /// Set up the test and return a tuple of the root directory and a file name vector.
     pub fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
         let dir_data = test_name.as_ref().to_path_buf();
         let files = vec![

@@ -1,12 +1,12 @@
 //! # Image compressor
 //!
 //! `image_compressor` is a library that compresses images with multiple threads.
-//! See [image](https://crates.io/crates/image) crate for check the extention that supported.
+//! See [image](https://crates.io/crates/image) crate for check the extension that supported.
 //!
-//! If you want to compress a single image, see [`Compressor`](compressor::Compressor) struct.
+//! If you want to compress a single image, see [`Compressor`](Compressor) struct.
 //!
 //! Or if you want to compress multiple images in a certain directory, see [`FolderCompressor`] struct.
-//! It compresses images by using multithread.
+//! It compresses images using multiple threads.
 //!
 //! To use these structs and its functions, you need to give them a function pointer or closure
 //! that calculate size and quality of new compressed images.
@@ -18,8 +18,8 @@
 //!
 //! ### `FolderCompressor` and its `compress` function example.
 //!
-//! The function compress all images in given source folder with multithread at the same time,
-//! and wait until everything is done.
+//! The function compress all images in given source folder multithreaded
+//! and waits until everything is done.
 //! If user set a [`Sender`] for [`FolderCompressor`], the method sends messages whether compressing is complete.
 //! ```
 //! use std::path::PathBuf;
@@ -162,11 +162,11 @@ impl FolderCompressor {
 
     /// Folder compress function.
     ///
-    /// The function compress all images in given source folder with multithreading, and wait until everything is done.
+    /// The function compress all images in given source folder with multithreading and waits until everything is done.
     /// If user set a [`Sender`] for [`FolderCompressor`] before, the method sends messages whether compressing is complete.
     ///
     /// # Warning
-    /// Since this function comsume its `self`, the `FolderCompressor` instance (which is self) is no longer available after calling this function.
+    /// Since this function consume its `self`, the `FolderCompressor` instance (which is self) is no longer available after calling this function.
     /// ```
     /// use std::path::PathBuf;
     /// use std::sync::mpsc;
@@ -376,7 +376,7 @@ mod tests {
     use rand::Rng;
     use std::fs;
 
-    /// Create test directory and a image file in it.
+    /// Create test directory and an image file in it.
     fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
         let test_dir = test_name.as_ref().to_path_buf();
         if test_dir.is_dir() {
