@@ -13,7 +13,6 @@ use std::path::Path;
 /// # Error
 /// - When directory is not empty.
 /// - When the child directory is not empty.
-/// 
 pub fn delete_recursive<O: AsRef<Path>>(dir: O) -> Result<(), Box<dyn Error>> {
     if dir.as_ref().is_dir() {
         let mut is_file_exist = false;
