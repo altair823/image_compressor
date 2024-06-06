@@ -1,4 +1,4 @@
-//! Module that contains things related with compressing an image.
+//! Module that contains things related to compressing an image.
 //!
 //! # Compressor
 //!
