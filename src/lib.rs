@@ -18,8 +18,8 @@
 //!
 //! ### `FolderCompressor` and its `compress` function example.
 //!
-//! The function compress all images in given source folder multithreaded
-//! and waits until everything is done.
+//! The function will compress all images, using multithreading, in a given source folder
+//! and will wait until everything is done.
 //! If user set a [`Sender`] for [`FolderCompressor`], the method sends messages whether compressing is complete.
 //! ```
 //! use std::path::PathBuf;
@@ -162,7 +162,7 @@ impl FolderCompressor {
 
     /// Folder compress function.
     ///
-    /// The function compress all images in given source folder with multithreading and waits until everything is done.
+    /// The function will compress all images, using multithreading, in a given source folder and will wait until everything is done.
     /// If user set a [`Sender`] for [`FolderCompressor`] before, the method sends messages whether compressing is complete.
     ///
     /// # Warning
