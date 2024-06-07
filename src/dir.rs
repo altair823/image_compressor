@@ -13,23 +13,22 @@ use std::path::Path;
 /// # Error
 /// - When directory is not empty.
 /// - When the child directory is not empty.
-/// 
 pub fn delete_recursive<O: AsRef<Path>>(dir: O) -> Result<(), Box<dyn Error>> {
     if dir.as_ref().is_dir() {
-        let mut is_file_exist = false;
+        let mut does_file_exist = false;
         for content in read_dir(&dir)? {
             let content = content?;
             let content_path = content.path();
             if content_path.is_dir() {
                 match delete_recursive(&content_path) {
                     Ok(_) => (),
-                    Err(_) => is_file_exist = true,
+                    Err(_) => does_file_exist = true,
                 }
             } else if &content_path.file_name().unwrap().to_str().unwrap()[..1] != "." {
-                is_file_exist = true;
+                does_file_exist = true;
             }
         }
-        if !is_file_exist {
+        if !does_file_exist {
             remove_dir_all(dir).unwrap();
             Ok(())
         } else {
@@ -62,7 +61,7 @@ mod tests {
         "file5.txt",
     ];
 
-    /// Setup the test and return a tuple of root directory and file name vector.
+    /// Set up the test and return a tuple of the root directory and a file name vector.
     pub fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
         let dir_data = test_name.as_ref().to_path_buf();
         let files = vec![
@@ -103,7 +102,7 @@ mod tests {
 
     fn cleanup<T: AsRef<Path>>(test_dir: T) {
         if test_dir.as_ref().is_dir() {
-            fs::remove_dir_all(&test_dir).unwrap();
+            remove_dir_all(&test_dir).unwrap();
         }
     }
 
@@ -111,7 +110,7 @@ mod tests {
     fn delete_recursive_test() {
         let (test_dir, test_files) = setup("delete_recursive_test_dir");
         if test_dir.is_dir() {
-            fs::remove_dir_all(&test_dir).unwrap();
+            remove_dir_all(&test_dir).unwrap();
         }
         assert!(delete_recursive(&test_dir).is_err());
         for test_file in test_files {

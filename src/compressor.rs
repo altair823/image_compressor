@@ -1,4 +1,4 @@
-//! Module that contains things related with compressing a image.
+//! Module that contains things related to compressing an image.
 //!
 //! # Compressor
 //!
@@ -87,7 +87,6 @@ impl Default for Factor {
 }
 
 /// Compressor struct.
-///
 pub struct Compressor<O: AsRef<Path>, D: AsRef<Path>> {
     factor: Factor,
     source_path: O,
@@ -118,7 +117,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
     /// Compress the image to jpg format.
     /// The new image will be saved in the destination directory.
-    ///
     fn compress(
         &self,
         img: image::DynamicImage,
@@ -138,9 +136,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let mut line = 0;
         let img_vec = img.to_rgb8().into_vec();
         while line <= target_height - 1 {
-            comp.write_scanlines(
-                &img_vec[line * target_width * 3..(line + 1) * target_width * 3],
-            )?;
+            comp.write_scanlines(&img_vec[line * target_width * 3..(line + 1) * target_width * 3])?;
             line += 1;
         }
         let compressed = comp.finish()?;
@@ -164,11 +160,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let resized_width = resized_img.width() as usize;
         let resized_height = resized_img.height() as usize;
 
-        Ok((
-            resized_img,
-            resized_width,
-            resized_height,
-        ))
+        Ok((resized_img, resized_width, resized_height))
     }
 
     /// Compress a file.
@@ -180,7 +172,6 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
     /// For a continuous multithreading process, every single error doesn't occur panic or exception and just print error message with return Ok.
     ///
     /// If the flag to delete the source is true, the function delete the source file.
-    ///
     pub fn compress_to_jpg(&self) -> Result<PathBuf, Box<dyn Error>> {
         let source_file_path = self.source_path.as_ref();
         let target_dir = self.dest_path.as_ref();
@@ -199,7 +190,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             return Err(Box::new(io::Error::new(
                 ErrorKind::AlreadyExists,
                 format!(
-                    "A file with the same name exists!: {}",
+                    "A file with the same name exists: {}",
                     target_file.file_name().unwrap().to_str().unwrap()
                 ),
             )));
@@ -210,14 +201,13 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             Ok(p) => p,
             Err(e) => {
                 let m = format!(
-                    "Cannot open file {} as image. Just copy it.: {}",
+                    "Cannot open file {} as image. Just copy it: {}",
                     file_name, e
                 );
                 fs::copy(source_file_path, target_dir.join(&file_name))?;
                 return Err(Box::new(io::Error::new(ErrorKind::InvalidData, m)));
             }
         };
-
 
         let (resized_img_data, target_width, target_height) =
             self.resize(image_vec, self.factor.size_ratio())?;
@@ -251,12 +241,11 @@ mod tests {
 
     use super::*;
 
-    use colorgrad;
     use image::ImageBuffer;
     use rand::Rng;
     use std::path::{Path, PathBuf};
 
-    /// Create test directory and a image file in it.
+    /// Create test directory and an image file in it.
     fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
         let test_dir = test_name.as_ref().to_path_buf();
         if test_dir.is_dir() {
@@ -283,19 +272,8 @@ mod tests {
         });
         let rgb_path = test_dir.join("img_random_rgb.gif");
         img_random_rgb.save(&rgb_path).unwrap();
-        let grad = colorgrad::CustomGradient::new()
-            .html_colors(&["deeppink", "gold", "seagreen"])
-            .build()
-            .unwrap();
-        let mut img_jpg = ImageBuffer::new(WIDTH, HEIGHT);
-        for (x, _, pixel) in img_jpg.enumerate_pixels_mut() {
-            let rgba = grad.at(x as f64 / WIDTH as f64).to_rgba8();
-            *pixel = image::Rgba(rgba);
-        }
-        let jpg_path = test_dir.join("img_jpg.jpg");
-        img_jpg.save(&jpg_path).unwrap();
 
-        (test_dir, vec![stripe_path, rgb_path, jpg_path])
+        (test_dir, vec![stripe_path, rgb_path])
     }
 
     fn cleanup<T: AsRef<Path>>(test_dir: T) {

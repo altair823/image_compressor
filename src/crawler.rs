@@ -14,7 +14,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 /// Find all files in the root directory in a recursive way.
-/// The hidden files started with `.` will be not inclused in result.
+/// The hidden files started with `.` will be not included in result.
 pub fn get_file_list<O: AsRef<Path>>(root: O) -> io::Result<Vec<PathBuf>> {
     let mut image_list: Vec<PathBuf> = Vec::new();
     let mut file_list: Vec<PathBuf> = root
@@ -79,7 +79,7 @@ pub mod tests {
         Ok(())
     }
 
-    /// Setup the test and return a tuple of root directory and file name vector.
+    /// Set up the test and return a tuple of the root directory and a file name vector.
     pub fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
         let dir_data = test_name.as_ref().to_path_buf();
         let files = vec![

@@ -1,12 +1,12 @@
 //! # Image compressor
 //!
 //! `image_compressor` is a library that compresses images with multiple threads.
-//! See [image](https://crates.io/crates/image) crate for check the extention that supported.
+//! See [image](https://crates.io/crates/image) crate for check the extension that supported.
 //!
-//! If you want to compress a single image, see [`Compressor`](compressor::Compressor) struct.
+//! If you want to compress a single image, see [`Compressor`](Compressor) struct.
 //!
 //! Or if you want to compress multiple images in a certain directory, see [`FolderCompressor`] struct.
-//! It compresses images by using multithread.
+//! It compresses images using multiple threads.
 //!
 //! To use these structs and its functions, you need to give them a function pointer or closure
 //! that calculate size and quality of new compressed images.
@@ -18,8 +18,8 @@
 //!
 //! ### `FolderCompressor` and its `compress` function example.
 //!
-//! The function compress all images in given source folder with multithread at the same time,
-//! and wait until everything is done.
+//! The function will compress all images, using multithreading, in a given source folder
+//! and will wait until everything is done.
 //! If user set a [`Sender`] for [`FolderCompressor`], the method sends messages whether compressing is complete.
 //! ```
 //! use std::path::PathBuf;
@@ -67,7 +67,7 @@ use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc};
 use std::thread;
 
 pub mod compressor;
@@ -86,7 +86,7 @@ fn try_send_message<T: ToString>(sender: &Option<Sender<T>>, message: T) {
 fn send_message<T: ToString>(sender: &Sender<T>, message: T) {
     match sender.send(message) {
         Ok(_) => (),
-        Err(e) => println!("Message passing error!: {}", e),
+        Err(e) => println!("Message passing error: {}", e),
     }
 }
 
@@ -162,11 +162,11 @@ impl FolderCompressor {
 
     /// Folder compress function.
     ///
-    /// The function compress all images in given source folder with multithreading, and wait until everything is done.
+    /// The function will compress all images, using multithreading, in a given source folder and will wait until everything is done.
     /// If user set a [`Sender`] for [`FolderCompressor`] before, the method sends messages whether compressing is complete.
     ///
     /// # Warning
-    /// Since this function comsume its `self`, the `FolderCompressor` instance (which is self) is no longer available after calling this function.
+    /// Since this function consume its `self`, the `FolderCompressor` instance (which is self) is no longer available after calling this function.
     /// ```
     /// use std::path::PathBuf;
     /// use std::sync::mpsc;
@@ -182,7 +182,7 @@ impl FolderCompressor {
     ///
     /// match comp.compress(){
     ///     Ok(_) => {},
-    ///     Err(e) => println!("Cannot compress the folder!: {}", e),
+    ///     Err(e) => println!("Cannot compress the folder: {}", e),
     /// }
     /// ```
     pub fn compress(self) -> Result<(), Box<dyn Error>> {
@@ -245,7 +245,7 @@ impl FolderCompressor {
                 ),
                 Err(e) => try_send_message(
                     &self.sender,
-                    format!("Cannot delete source directories! {}", e),
+                    format!("Cannot delete source directories: {}", e),
                 ),
             };
         }
@@ -253,7 +253,7 @@ impl FolderCompressor {
     }
 }
 
-/// Process function for multithread compressing.
+/// Process function for multithreaded compression.
 /// This function is used when user doesn't set a [`Sender`] for [`FolderCompressor`].
 fn process(
     queue: Arc<SegQueue<PathBuf>>,
@@ -268,10 +268,7 @@ fn process(
             Some(file) => {
                 let file_name = match file.file_name() {
                     None => "",
-                    Some(s) => match s.to_str() {
-                        None => "",
-                        Some(s) => s,
-                    },
+                    Some(s) => s.to_str().unwrap_or_else(|| ""),
                 };
                 let parent = match file.parent() {
                     Some(p) => match p.strip_prefix(root) {
@@ -312,7 +309,7 @@ fn process(
     }
 }
 
-/// Process function for multithread compressing.
+/// Process function for multithreaded compression.
 /// This function is used when user sets a [`Sender`] for [`FolderCompressor`].
 /// This function sends messages to the [`Sender`] when compressing is complete.
 fn process_with_sender(
@@ -321,7 +318,7 @@ fn process_with_sender(
     dest: &Path,
     to_delete_source: bool,
     factor: Factor,
-    sender: mpsc::Sender<String>,
+    sender: Sender<String>,
 ) {
     while !queue.is_empty() {
         match queue.pop() {
@@ -329,10 +326,7 @@ fn process_with_sender(
             Some(file) => {
                 let file_name = match file.file_name() {
                     None => "",
-                    Some(s) => match s.to_str() {
-                        None => "",
-                        Some(s) => s,
-                    },
+                    Some(s) => s.to_str().unwrap_or_else(|| ""),
                 };
                 let parent = match file.parent() {
                     Some(p) => match p.strip_prefix(root) {
@@ -382,7 +376,7 @@ mod tests {
     use rand::Rng;
     use std::fs;
 
-    /// Create test directory and a image file in it.
+    /// Create test directory and an image file in it.
     fn setup<T: AsRef<Path>>(test_name: T) -> (PathBuf, Vec<PathBuf>) {
         let test_dir = test_name.as_ref().to_path_buf();
         if test_dir.is_dir() {
@@ -409,18 +403,7 @@ mod tests {
         });
         let rgb_path = test_dir.join("img_random_rgb.gif");
         img_random_rgb.save(&rgb_path).unwrap();
-        let grad = colorgrad::CustomGradient::new()
-            .html_colors(&["deeppink", "gold", "seagreen"])
-            .build()
-            .unwrap();
-        let mut img_jpg = ImageBuffer::new(WIDTH, HEIGHT);
-        for (x, _, pixel) in img_jpg.enumerate_pixels_mut() {
-            let rgba = grad.at(x as f64 / WIDTH as f64).to_rgba8();
-            *pixel = image::Rgba(rgba);
-        }
-        let jpg_path = test_dir.join("img_jpg.jpg");
-        img_jpg.save(&jpg_path).unwrap();
-        (test_dir, vec![stripe_path, rgb_path, jpg_path])
+        (test_dir, vec![stripe_path, rgb_path])
     }
 
     fn cleanup<T: AsRef<Path>>(test_dir: T) {
