@@ -18,10 +18,11 @@
 //! ```
 
 use image::imageops::FilterType;
+use image::{ImageError, ImageFormat};
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufWriter, ErrorKind, Write};
+use std::io::{BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -135,7 +136,7 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
 
         let mut line = 0;
         let img_vec = img.to_rgb8().into_vec();
-        while line <= target_height - 1 {
+        while line < target_height {
             comp.write_scanlines(&img_vec[line * target_width * 3..(line + 1) * target_width * 3])?;
             line += 1;
         }
@@ -161,6 +162,16 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
         let resized_height = resized_img.height() as usize;
 
         Ok((resized_img, resized_width, resized_height))
+    }
+
+    /// Guess actual image format
+    fn guess_image_format(&self, source_file_path: &Path) -> Result<ImageFormat, ImageError> {
+        let mut file = File::open(source_file_path)?;
+        let _ = file.seek(SeekFrom::Start(0));
+        let mut buf = vec![0; 10];
+        let _ = file.read_exact(&mut buf);
+
+        image::guess_format(buf.as_slice())
     }
 
     /// Compress a file.
@@ -196,15 +207,25 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             )));
         }
 
+        let Ok(guessed_format) = self.guess_image_format(source_file_path) else {
+            return Err(Box::new(io::Error::new(
+                ErrorKind::InvalidInput,
+                "Unrecognized image format",
+            )));
+        };
+
         // let mut converted_file: Option<PathBuf> = None;
-        let image_vec = match image::open(source_file_path) {
+        let image_vec = match image::load(
+            BufReader::new(File::open(source_file_path)?),
+            guessed_format,
+        ) {
             Ok(p) => p,
             Err(e) => {
                 let m = format!(
                     "Cannot open file {} as image. Just copy it: {}",
                     file_name, e
                 );
-                fs::copy(source_file_path, target_dir.join(&file_name))?;
+                fs::copy(source_file_path, target_dir.join(file_name))?;
                 return Err(Box::new(io::Error::new(ErrorKind::InvalidData, m)));
             }
         };
