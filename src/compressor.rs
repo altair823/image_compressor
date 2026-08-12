@@ -18,7 +18,7 @@
 //! ```
 
 use image::imageops::FilterType;
-use image::{ImageError, ImageFormat};
+use image::{ImageError, ImageFormat, ImageReader, Limits};
 use mozjpeg::{ColorSpace, Compress, ScanMode};
 use std::error::Error;
 use std::fs::File;
@@ -93,6 +93,7 @@ pub struct Compressor<O: AsRef<Path>, D: AsRef<Path>> {
     source_path: O,
     dest_path: D,
     delete_source: bool,
+    memory_limit: Option<u64>,
 }
 
 impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
@@ -103,12 +104,31 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             source_path,
             dest_path: dest_dir_path,
             delete_source: false,
+            memory_limit: None,
         }
     }
 
     /// Set factor for the new compressed image.
     pub fn set_factor(&mut self, factor: Factor) {
         self.factor = factor;
+    }
+
+    /// Set the maximum number of bytes the decoder may allocate while reading the source image.
+    ///
+    /// By default there is no limit, so images of any resolution can be decoded.
+    /// Set a limit when decoding images from an untrusted source, where a maliciously
+    /// crafted file could otherwise exhaust memory.
+    ///
+    /// # Examples
+    /// ```
+    /// use image_compressor::compressor::Compressor;
+    /// use std::path::Path;
+    ///
+    /// let mut comp = Compressor::new(Path::new("source.png"), Path::new("dest"));
+    /// comp.set_memory_limit(512 * 1024 * 1024);   // 512 MiB
+    /// ```
+    pub fn set_memory_limit(&mut self, bytes: u64) {
+        self.memory_limit = Some(bytes);
     }
 
     /// Sets whether the program deletes the source file.
@@ -214,11 +234,18 @@ impl<O: AsRef<Path>, D: AsRef<Path>> Compressor<O, D> {
             )));
         };
 
-        // let mut converted_file: Option<PathBuf> = None;
-        let image_vec = match image::load(
+        // `ImageReader` rather than `image::load`, because `image::load` applies
+        // `Limits::default()`, which caps decoder allocations at 512 MiB and so rejects
+        // high resolution images outright. See issue #19.
+        let mut reader = ImageReader::with_format(
             BufReader::new(File::open(source_file_path)?),
             guessed_format,
-        ) {
+        );
+        let mut limits = Limits::no_limits();
+        limits.max_alloc = self.memory_limit;
+        reader.limits(limits);
+
+        let image_vec = match reader.decode() {
             Ok(p) => p,
             Err(e) => {
                 let m = format!(
@@ -263,7 +290,6 @@ mod tests {
     use super::*;
 
     use image::ImageBuffer;
-    use rand::Rng;
     use std::path::{Path, PathBuf};
 
     /// Create test directory and an image file in it.
@@ -285,14 +311,11 @@ mod tests {
         });
         let stripe_path = test_dir.join("img_stripe.png");
         img_stripe.save(&stripe_path).unwrap();
-        let img_random_rgb = ImageBuffer::from_fn(WIDTH, HEIGHT, |_, _| {
-            let r = rand::thread_rng().gen_range(0..256) as u8;
-            let g = rand::thread_rng().gen_range(0..256) as u8;
-            let b = rand::thread_rng().gen_range(0..256) as u8;
-            image::Rgb([r, g, b])
+        let img_rgb = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, y| {
+            image::Rgb([(x * 7) as u8, (y * 13) as u8, (x * y) as u8])
         });
-        let rgb_path = test_dir.join("img_random_rgb.gif");
-        img_random_rgb.save(&rgb_path).unwrap();
+        let rgb_path = test_dir.join("img_rgb.gif");
+        img_rgb.save(&rgb_path).unwrap();
 
         (test_dir, vec![stripe_path, rgb_path])
     }
@@ -368,6 +391,26 @@ mod tests {
             new_test_image.set_extension("jpg");
             assert!(new_test_image.is_file());
         }
+        cleanup(test_dir);
+        cleanup(dest_dir);
+    }
+
+    /// The decoder must be unlimited by default, and must honour a limit once one is set.
+    /// Guards against the `image::load` default of 512 MiB coming back. See issue #19.
+    #[test]
+    fn memory_limit_test() {
+        let (test_dir, test_images) = setup("memory_limit_test");
+        let dest_dir = PathBuf::from("memory_limit_test_dest_dir");
+        fs::create_dir_all(&dest_dir).unwrap();
+
+        // A 256x256 image needs far more than 16 bytes to decode.
+        let mut limited = Compressor::new(&test_images[0], &dest_dir);
+        limited.set_memory_limit(16);
+        assert!(limited.compress_to_jpg().is_err());
+
+        let unlimited = Compressor::new(&test_images[0], &dest_dir);
+        assert!(unlimited.compress_to_jpg().is_ok());
+
         cleanup(test_dir);
         cleanup(dest_dir);
     }
