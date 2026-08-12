@@ -1,6 +1,6 @@
 # Image Compressor
 
-[![Crates.io](https://img.shields.io/crates/v/image_compressor.svg)](https://crates.io/crates/image_compressor)  [![Documentation](https://docs.rs/image/badge.svg)](https://docs.rs/image_compressor/)
+[![Crates.io](https://img.shields.io/crates/v/image_compressor.svg)](https://crates.io/crates/image_compressor)  [![Documentation](https://docs.rs/image_compressor/badge.svg)](https://docs.rs/image_compressor/)  [![CI](https://github.com/altair823/image_compressor/actions/workflows/ci.yml/badge.svg)](https://github.com/altair823/image_compressor/actions/workflows/ci.yml)
 
 A library for resizing and compressing images to **jpg**.
 
@@ -10,6 +10,7 @@ A library for resizing and compressing images to **jpg**.
 - Multithreading. 
 - Customize the quality and size ratio of compressed images. 
 - Send a completion message via `mpsc::Sender` (see [Using Message Passing to Transfer Data Between Threads](https://doc.rust-lang.org/book/ch16-02-message-passing.html) in rust tutorial).
+- Images of any resolution are decoded by default. Call `set_memory_limit` to cap decoder allocations when the source images are untrusted.
 
 ## Supported Image Format
 
@@ -55,7 +56,8 @@ use image_compressor::Factor;
 
 let source = PathBuf::from("source").join("file1.jpg");
 let dest = PathBuf::from("dest");
-let comp = Compressor::new(source_dir, dest_dir);
-compressor.set_factor(Factor::new(80., 0.8));
+
+let mut comp = Compressor::new(source, dest);
+comp.set_factor(Factor::new(80., 0.8));
 comp.compress_to_jpg();
 ```
