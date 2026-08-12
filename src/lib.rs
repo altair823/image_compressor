@@ -98,6 +98,7 @@ pub struct FolderCompressor {
     thread_count: u32,
     delete_source: bool,
     sender: Option<Sender<String>>,
+    memory_limit: Option<u64>,
 }
 
 impl FolderCompressor {
@@ -124,12 +125,30 @@ impl FolderCompressor {
             thread_count: 1,
             delete_source: false,
             sender: None,
+            memory_limit: None,
         }
     }
 
     /// Set Factor using to compress images.
     pub fn set_factor(&mut self, factor: Factor) {
         self.factor = factor;
+    }
+
+    /// Set the maximum number of bytes the decoder may allocate while reading each source image.
+    ///
+    /// By default there is no limit, so images of any resolution can be decoded.
+    /// Set a limit when compressing a folder of images from an untrusted source.
+    ///
+    /// # Examples
+    /// ```
+    /// use image_compressor::FolderCompressor;
+    /// use std::path::Path;
+    ///
+    /// let mut comp = FolderCompressor::new(Path::new("source"), Path::new("dest"));
+    /// comp.set_memory_limit(512 * 1024 * 1024);   // 512 MiB
+    /// ```
+    pub fn set_memory_limit(&mut self, bytes: u64) {
+        self.memory_limit = Some(bytes);
     }
 
     /// Set whether to delete source files.
@@ -214,6 +233,7 @@ impl FolderCompressor {
                             &arc_dest,
                             self.delete_source,
                             *arc_factor.clone(),
+                            self.memory_limit,
                             new_s,
                         );
                     })
@@ -225,6 +245,7 @@ impl FolderCompressor {
                         &arc_dest,
                         self.delete_source,
                         *arc_factor.clone(),
+                        self.memory_limit,
                     );
                 }),
             };
@@ -261,6 +282,7 @@ fn process(
     dest: &Path,
     to_delete_source: bool,
     factor: Factor,
+    memory_limit: Option<u64>,
 ) {
     while !queue.is_empty() {
         match queue.pop() {
@@ -296,6 +318,9 @@ fn process(
                 let mut compressor = Compressor::new(&file, new_dest_dir);
                 compressor.set_factor(factor);
                 compressor.set_delete_source(to_delete_source);
+                if let Some(limit) = memory_limit {
+                    compressor.set_memory_limit(limit);
+                }
                 match compressor.compress_to_jpg() {
                     Ok(_) => {
                         println!("Compress complete! File: {}", file_name);
@@ -318,6 +343,7 @@ fn process_with_sender(
     dest: &Path,
     to_delete_source: bool,
     factor: Factor,
+    memory_limit: Option<u64>,
     sender: Sender<String>,
 ) {
     while !queue.is_empty() {
@@ -354,6 +380,9 @@ fn process_with_sender(
                 let mut compressor = Compressor::new(&file, new_dest_dir);
                 compressor.set_factor(factor);
                 compressor.set_delete_source(to_delete_source);
+                if let Some(limit) = memory_limit {
+                    compressor.set_memory_limit(limit);
+                }
                 match compressor.compress_to_jpg() {
                     Ok(p) => send_message(
                         &sender,
@@ -373,7 +402,6 @@ fn process_with_sender(
 mod tests {
     use super::*;
     use image::ImageBuffer;
-    use rand::Rng;
     use std::fs;
 
     /// Create test directory and an image file in it.
@@ -395,14 +423,11 @@ mod tests {
         });
         let stripe_path = test_dir.join("img_stripe.png");
         img_stripe.save(&stripe_path).unwrap();
-        let img_random_rgb = ImageBuffer::from_fn(WIDTH, HEIGHT, |_, _| {
-            let r = rand::thread_rng().gen_range(0..256) as u8;
-            let g = rand::thread_rng().gen_range(0..256) as u8;
-            let b = rand::thread_rng().gen_range(0..256) as u8;
-            image::Rgb([r, g, b])
+        let img_rgb = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, y| {
+            image::Rgb([(x * 7) as u8, (y * 13) as u8, (x * y) as u8])
         });
-        let rgb_path = test_dir.join("img_random_rgb.gif");
-        img_random_rgb.save(&rgb_path).unwrap();
+        let rgb_path = test_dir.join("img_rgb.gif");
+        img_rgb.save(&rgb_path).unwrap();
         (test_dir, vec![stripe_path, rgb_path])
     }
 
